@@ -32,6 +32,7 @@ El contenido de `dist/` es estático: se puede subir tal cual a Netlify, Vercel,
 3. **Resultados** — se recalculan en vivo: material, luz, desgaste, margen de error, costo total, insumos (+30 %), **total a cobrar** y **precio MercadoLibre**.
 4. **Mis productos** — guardá la pieza calculada con nombre; buscá, cargala de nuevo, duplicala o eliminala. Exportá/importá todo (perfiles + productos) como JSON. Al importar podés reemplazar o combinar.
 5. **Presupuesto PDF** — armá un presupuesto para el cliente con la pieza actual, productos guardados e ítems libres (envío, diseño…): cantidades, precios editables, datos del cliente, validez y observaciones. Se descarga como PDF (generado en el navegador con jsPDF) y muestra solo precios de venta, nunca los costos. Los datos de la empresa (nombre, teléfono, email e Instagram) y la numeración quedan guardados en el navegador.
+6. **Pedidos** — cargá pedidos desde la pieza de la calculadora, desde un producto guardado o a mano: cliente, email/teléfono, cantidad, precio, fecha de entrega y notas. Cada pedido avanza por **Pendiente → En cola → Imprimiendo → Post-procesado → Terminado → Entregado** (o **Cancelado**), con filtros por estado, buscador, resumen (activos, imprimiendo, listos, atrasados), aviso de atrasados / vence hoy e historial de cambios. Al pasar a **Terminado** se avisa por mail a tu email (el de los datos de la empresa) y, si lo tildás, al cliente. *Por ahora los pedidos viven en el navegador y el aviso es simulado (queda en el historial); el próximo paso es el backend en el VPS.*
 
 ## Fórmula
 
@@ -60,13 +61,15 @@ src/
     model.ts       tipos, valores por defecto, normalización e import/export
     quote.ts       modelo y totales del presupuesto
     quotePdf.ts    generación del PDF (se carga solo al descargar)
+    pedidos.ts     modelo, estados y reglas de pedidos (puro, con tests)
+    pedidosRepo.ts acceso a pedidos detrás de una interfaz (hoy localStorage, después el API)
     storage.ts     acceso a localStorage envuelto en try/catch
-  components/      ProfileSection, PieceSection, ResultsPanel, ProductsSection, NumberField, Section
+  components/      ProfileSection, PieceSection, ResultsPanel, ProductsSection, PedidosSection, PedidoForm, EstadoBadge, …
   App.tsx          estado y persistencia
 ```
 
 ## Datos guardados
 
-Claves en `localStorage`: `calc3d:profiles`, `calc3d:activeProfile`, `calc3d:piece`, `calc3d:products`, `calc3d:business`, `calc3d:quoteSeq`.
+Claves en `localStorage`: `calc3d:profiles`, `calc3d:activeProfile`, `calc3d:piece`, `calc3d:products`, `calc3d:business`, `calc3d:quoteSeq`, `calc3d:pedidos`, `calc3d:pedidoSeq`.
 Si el navegador bloquea el almacenamiento (modo privado, cuota llena), la app sigue funcionando y avisa.
 Los productos guardan una copia del perfil usado, así que borrar un perfil no rompe el historial.

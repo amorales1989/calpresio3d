@@ -10,6 +10,8 @@ export const KEYS = {
   products: `${PREFIX}products`,
   business: `${PREFIX}business`,
   quoteSeq: `${PREFIX}quoteSeq`,
+  pedidos: `${PREFIX}pedidos`,
+  pedidoSeq: `${PREFIX}pedidoSeq`,
 } as const;
 
 export function readJSON<T>(key: string, fallback: T): T {
