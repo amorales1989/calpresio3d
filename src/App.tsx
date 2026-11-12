@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDialog } from "./components/Dialog";
 import { ExportPanel } from "./components/ExportPanel";
+import { PedidoForm } from "./components/PedidoForm";
+import { PedidosSection } from "./components/PedidosSection";
 import { ProductsSection } from "./components/ProductsSection";
 import { PieceSection } from "./components/PieceSection";
 import { ProfileSection } from "./components/ProfileSection";
 import { QuoteBuilder, type QuoteSource } from "./components/QuoteBuilder";
 import { ResultsPanel } from "./components/ResultsPanel";
-import { calculate, formatMoney } from "./lib/calc";
+import { calculate, formatMoney, round2 } from "./lib/calc";
 import { CURRENCY_SYMBOLS, type Currency } from "./lib/data";
 import {
   defaultPiece,
@@ -22,6 +24,19 @@ import {
   type Product,
   type Profile,
 } from "./lib/model";
+import {
+  ESTADO_LABEL,
+  emptyInput,
+  formatNumeroPedido,
+  type Aviso,
+  type DatosCalculo,
+  type Estado,
+  type OrigenPedido,
+  type Pedido,
+  type PedidoInput,
+} from "./lib/pedidos";
+import { LocalPedidosRepo, type PedidosRepo } from "./lib/pedidosRepo";
+import { normalizeBusiness } from "./lib/quote";
 import { KEYS, readJSON, readString, writeJSON, writeString } from "./lib/storage";
 
 // ---------- carga inicial desde localStorage ----------
@@ -42,6 +57,23 @@ function initialState() {
   const activeId = readString(KEYS.activeProfile);
   const active = profiles.find((p) => p.id === activeId) ?? profiles[0];
   return { profiles, draft: { ...active } };
+}
+
+/** Mail del negocio (se carga en "Datos de la empresa" del presupuesto): recibe el aviso de terminado. */
+const tuEmail = () => normalizeBusiness(readJSON<unknown>(KEYS.business, null)).email.trim();
+
+// Hoy los pedidos viven en el navegador; cuando esté el servidor se cambia por el repo del API.
+const pedidosRepo: PedidosRepo = new LocalPedidosRepo(tuEmail);
+
+type PedidoFormState =
+  | { mode: "new"; initial: PedidoInput; origen: OrigenPedido; datosCalculo: DatosCalculo | null; origenLabel?: string }
+  | { mode: "edit"; pedido: Pedido };
+
+function avisoMsg(p: Pedido, aviso: Aviso): string {
+  const n = formatNumeroPedido(p.numero);
+  if (aviso.motivo) return `${n} terminado. ${aviso.motivo}`;
+  const quien = aviso.destinatarios.map((d) => (d.rol === "vos" ? "vos" : "el cliente")).join(" y ");
+  return `${n} terminado · aviso${aviso.simulado ? " simulado" : ""} por mail a ${quien}.`;
 }
 
 const sameProfile = (a: Profile, b: Profile) => JSON.stringify(a) === JSON.stringify(b);
@@ -66,6 +98,8 @@ export default function App() {
   const [piece, setPiece] = useState<Piece>(() => normalizePiece(readJSON<unknown>(KEYS.piece, null)));
   const [products, setProducts] = useState<Product[]>(loadProducts);
   const toast = useToast();
+  const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const [pedidoForm, setPedidoForm] = useState<PedidoFormState | null>(null);
   const showToast = toast.show;
   const dialog = useDialog();
 
@@ -203,6 +237,98 @@ export default function App() {
     setProducts((list) => list.filter((x) => x.id !== p.id));
   }
 
+  // ---------- pedidos ----------
+
+  useEffect(() => {
+    pedidosRepo.list().then(setPedidos, () => showToast("No se pudieron cargar los pedidos.", "error"));
+  }, [showToast]);
+
+  const upsertPedido = (p: Pedido) =>
+    setPedidos((list) => (list.some((x) => x.id === p.id) ? list.map((x) => (x.id === p.id ? p : x)) : [p, ...list]));
+
+  const fail = (e: unknown) => toast.show(e instanceof Error ? e.message : "No se pudo guardar el pedido.", "error");
+
+  function pedidoDesdeCalculadora() {
+    setPedidoForm({
+      mode: "new",
+      initial: { ...emptyInput(draft.currency), precioUnitario: round2(results.total) },
+      origen: { tipo: "calculadora" },
+      datosCalculo: { piece: { ...piece }, profile: { ...draft }, results: { ...results } },
+      origenLabel: `Pieza de la calculadora · ${formatMoney(results.total, symbol)} c/u`,
+    });
+  }
+
+  function pedidoDesdeProducto(p: Product) {
+    setPedidoForm({
+      mode: "new",
+      initial: { ...emptyInput(p.profile.currency), descripcion: p.name, precioUnitario: round2(p.results.total) },
+      origen: { tipo: "producto", productoId: p.id, nombre: p.name },
+      datosCalculo: { piece: p.piece, profile: p.profile, results: p.results },
+      origenLabel: `Producto “${p.name}”`,
+    });
+  }
+
+  async function submitPedido(input: PedidoInput, estado: Estado) {
+    if (!pedidoForm) return;
+    try {
+      if (pedidoForm.mode === "edit") {
+        upsertPedido(await pedidosRepo.update(pedidoForm.pedido.id, input));
+        toast.show(`Pedido ${formatNumeroPedido(pedidoForm.pedido.numero)} actualizado.`);
+      } else {
+        const p = await pedidosRepo.create({ input, estado, origen: pedidoForm.origen, datosCalculo: pedidoForm.datosCalculo });
+        upsertPedido(p);
+        toast.show(`Pedido ${formatNumeroPedido(p.numero)} creado.`);
+      }
+      setPedidoForm(null);
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  async function setEstadoPedido(p: Pedido, estado: Estado) {
+    if (estado === p.estado) return;
+    if (
+      estado === "cancelado" &&
+      !(await dialog.confirm(`¿Cancelar el pedido ${formatNumeroPedido(p.numero)}?`, `${p.clienteNombre} · ${p.descripcion}`, "Cancelar pedido", true))
+    ) {
+      return;
+    }
+    try {
+      const { pedido, aviso } = await pedidosRepo.setEstado(p.id, estado);
+      upsertPedido(pedido);
+      if (aviso) toast.show(avisoMsg(pedido, aviso), aviso.motivo ? "error" : "ok");
+      else toast.show(`${formatNumeroPedido(p.numero)} → ${ESTADO_LABEL[estado]}`);
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  async function reenviarAviso(p: Pedido) {
+    try {
+      const { pedido, aviso } = await pedidosRepo.reenviarAviso(p.id);
+      upsertPedido(pedido);
+      toast.show(avisoMsg(pedido, aviso).replace("terminado", "terminado (reenvío)"), aviso.motivo ? "error" : "ok");
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  async function deletePedido(p: Pedido) {
+    const ok = await dialog.confirm(
+      `¿Eliminar el pedido ${formatNumeroPedido(p.numero)}?`,
+      `${p.clienteNombre} · ${p.descripcion}. No se puede deshacer (si solo no va más, mejor marcalo como Cancelado).`,
+      "Eliminar",
+      true,
+    );
+    if (!ok) return;
+    try {
+      await pedidosRepo.remove(p.id);
+      setPedidos((list) => list.filter((x) => x.id !== p.id));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
   // ---------- export / import ----------
 
   function exportAll() {
@@ -286,6 +412,7 @@ export default function App() {
             profileName={draft.name || "Sin nombre"}
             onSaveProduct={saveProduct}
             onQuote={() => setQuote({ currency: draft.currency, keys: ["current"] })}
+            onPedido={pedidoDesdeCalculadora}
           />
         </div>
 
@@ -296,8 +423,23 @@ export default function App() {
           onDelete={deleteProduct}
           onExport={exportAll}
           onImport={importAll}
+          onPedido={pedidoDesdeProducto}
           onQuote={(p) => setQuote(p ? { currency: p.profile.currency, keys: [p.id] } : { currency: draft.currency, keys: [] })}
         />
+
+        <div className="lg:col-span-2">
+          <PedidosSection
+            pedidos={pedidos}
+            local={pedidosRepo.local}
+            onNew={() =>
+              setPedidoForm({ mode: "new", initial: emptyInput(draft.currency), origen: { tipo: "manual" }, datosCalculo: null })
+            }
+            onEdit={(pedido) => setPedidoForm({ mode: "edit", pedido })}
+            onSetEstado={setEstadoPedido}
+            onReenviarAviso={reenviarAviso}
+            onDelete={deletePedido}
+          />
+        </div>
       </main>
 
       <footer className="mt-10 text-center text-xs text-stone-400">
@@ -312,6 +454,18 @@ export default function App() {
           initialKeys={quote.keys}
           onClose={() => setQuote(null)}
           onDone={toast.show}
+        />
+      )}
+
+      {pedidoForm && (
+        <PedidoForm
+          key={pedidoForm.mode === "edit" ? pedidoForm.pedido.id : "new"}
+          editing={pedidoForm.mode === "edit" ? { numero: pedidoForm.pedido.numero } : undefined}
+          initial={pedidoForm.mode === "edit" ? pedidoForm.pedido : pedidoForm.initial}
+          origenLabel={pedidoForm.mode === "new" ? pedidoForm.origenLabel : undefined}
+          tuEmail={tuEmail()}
+          onSubmit={submitPedido}
+          onClose={() => setPedidoForm(null)}
         />
       )}
 

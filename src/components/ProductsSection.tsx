@@ -12,13 +12,14 @@ interface Props {
   onExport: () => void;
   onImport: (file: File) => void;
   onQuote: (p: Product | null) => void;
+  onPedido: (p: Product) => void;
 }
 
 const dateFmt = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" });
 
 const normalize = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
-export function ProductsSection({ products, onLoad, onDuplicate, onDelete, onExport, onImport, onQuote }: Props) {
+export function ProductsSection({ products, onLoad, onDuplicate, onDelete, onExport, onImport, onQuote, onPedido }: Props) {
   const [query, setQuery] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -92,12 +93,15 @@ export function ProductsSection({ products, onLoad, onDuplicate, onDelete, onExp
                         <span className="text-stone-500"> · ML {formatMoney(p.results.precioML, sym)}</span>
                       </div>
                     </div>
-                    <div className="flex shrink-0 gap-1">
+                    <div className="flex shrink-0 flex-wrap gap-1">
                       <button type="button" className="btn-ghost text-xs" onClick={() => onLoad(p)}>
                         Cargar
                       </button>
                       <button type="button" className="btn-ghost text-xs" onClick={() => onQuote(p)}>
                         Presupuestar
+                      </button>
+                      <button type="button" className="btn-ghost text-xs" onClick={() => onPedido(p)}>
+                        Pedido
                       </button>
                       <button type="button" className="btn-ghost text-xs" onClick={() => onDuplicate(p)}>
                         Duplicar

@@ -8,6 +8,7 @@ interface Props {
   profileName: string;
   onSaveProduct: (name: string) => void;
   onQuote: () => void;
+  onPedido: () => void;
 }
 
 function formatHours(h: number) {
@@ -17,7 +18,7 @@ function formatHours(h: number) {
   return `${hh} h ${mm.toString().padStart(2, "0")} min`;
 }
 
-export function ResultsPanel({ results: r, symbol, multiplier, profileName, onSaveProduct, onQuote }: Props) {
+export function ResultsPanel({ results: r, symbol, multiplier, profileName, onSaveProduct, onQuote, onPedido }: Props) {
   const money = (n: number) => formatMoney(n, symbol);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
@@ -111,6 +112,7 @@ export function ResultsPanel({ results: r, symbol, multiplier, profileName, onSa
             </div>
           </form>
         ) : (
+          <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-2 sm:flex-row lg:flex-col xl:flex-row">
             <button type="button" className="btn-secondary flex-1" onClick={() => setSaving(true)}>
               Guardar como producto
@@ -118,6 +120,10 @@ export function ResultsPanel({ results: r, symbol, multiplier, profileName, onSa
             <button type="button" className="btn-primary flex-1" onClick={onQuote} disabled={r.total <= 0}>
               Presupuesto PDF
             </button>
+          </div>
+          <button type="button" className="btn-secondary" onClick={onPedido} disabled={r.total <= 0}>
+            Crear pedido con esta pieza
+          </button>
           </div>
         )}
       </div>

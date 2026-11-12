@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatMoney, round2, sanitize } from "../lib/calc";
 import { CURRENCY_SYMBOLS, type Currency } from "../lib/data";
 import { newId, type Product } from "../lib/model";
@@ -15,6 +15,7 @@ import {
 } from "../lib/quote";
 import { KEYS, readJSON, readString, writeJSON, writeString } from "../lib/storage";
 import { NumberField } from "./NumberField";
+import { TextField } from "./TextField";
 
 export interface QuoteSource {
   key: string; // "current" o id de producto
@@ -319,57 +320,6 @@ export function QuoteBuilder({ currency, current, products, initialKeys, onClose
           </button>
         </footer>
       </div>
-    </div>
-  );
-}
-
-function TextField({
-  label,
-  value,
-  onChange,
-  placeholder,
-  multiline,
-  type = "text",
-  prefix,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  multiline?: boolean;
-  type?: "text" | "tel" | "email";
-  prefix?: string;
-}) {
-  const id = useId();
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-xs font-medium text-stone-600 dark:text-stone-400">
-        {label}
-      </label>
-      {multiline ? (
-        <textarea
-          id={id}
-          rows={3}
-          maxLength={600}
-          className="field-input resize-y"
-          placeholder={placeholder}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      ) : (
-        <div className="relative flex items-center">
-          {prefix && <span className="pointer-events-none absolute left-3 text-sm text-stone-400">{prefix}</span>}
-          <input
-            id={id}
-            type={type}
-            className={`field-input ${prefix ? "pl-7" : ""}`}
-            maxLength={120}
-            placeholder={placeholder}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-          />
-        </div>
-      )}
     </div>
   );
 }
