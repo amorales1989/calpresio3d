@@ -4,9 +4,10 @@ import { ExportPanel } from "./components/ExportPanel";
 import { ProductsSection } from "./components/ProductsSection";
 import { PieceSection } from "./components/PieceSection";
 import { ProfileSection } from "./components/ProfileSection";
+import { QuoteBuilder, type QuoteSource } from "./components/QuoteBuilder";
 import { ResultsPanel } from "./components/ResultsPanel";
-import { calculate } from "./lib/calc";
-import { CURRENCY_SYMBOLS } from "./lib/data";
+import { calculate, formatMoney } from "./lib/calc";
+import { CURRENCY_SYMBOLS, type Currency } from "./lib/data";
 import {
   defaultPiece,
   defaultProfile,
@@ -101,6 +102,19 @@ export default function App() {
 
   const results = useMemo(() => calculate({ ...draft, ...piece }), [draft, piece]);
   const symbol = CURRENCY_SYMBOLS[draft.currency];
+
+  // ---------- presupuesto ----------
+
+  const [quote, setQuote] = useState<{ currency: Currency; keys: string[] } | null>(null);
+  const currentSource: QuoteSource | null =
+    quote && quote.currency === draft.currency && results.total > 0
+      ? {
+          key: "current",
+          label: `Pieza actual (calculadora) — ${formatMoney(results.total, symbol)}`,
+          description: "Pieza impresa en 3D",
+          unitPrice: results.total,
+        }
+      : null;
 
   // ---------- perfiles ----------
 
@@ -271,6 +285,7 @@ export default function App() {
             multiplier={piece.profitMultiplier}
             profileName={draft.name || "Sin nombre"}
             onSaveProduct={saveProduct}
+            onQuote={() => setQuote({ currency: draft.currency, keys: ["current"] })}
           />
         </div>
 
@@ -281,12 +296,24 @@ export default function App() {
           onDelete={deleteProduct}
           onExport={exportAll}
           onImport={importAll}
+          onQuote={(p) => setQuote(p ? { currency: p.profile.currency, keys: [p.id] } : { currency: draft.currency, keys: [] })}
         />
       </main>
 
       <footer className="mt-10 text-center text-xs text-stone-400">
         Sin servidores: tus datos viven en este navegador. Exportá un JSON de vez en cuando como respaldo.
       </footer>
+
+      {quote && (
+        <QuoteBuilder
+          currency={quote.currency}
+          current={currentSource}
+          products={products}
+          initialKeys={quote.keys}
+          onClose={() => setQuote(null)}
+          onDone={toast.show}
+        />
+      )}
 
       {dialog.element}
 

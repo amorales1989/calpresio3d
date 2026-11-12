@@ -11,13 +11,14 @@ interface Props {
   onDelete: (p: Product) => void;
   onExport: () => void;
   onImport: (file: File) => void;
+  onQuote: (p: Product | null) => void;
 }
 
 const dateFmt = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" });
 
 const normalize = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
-export function ProductsSection({ products, onLoad, onDuplicate, onDelete, onExport, onImport }: Props) {
+export function ProductsSection({ products, onLoad, onDuplicate, onDelete, onExport, onImport, onQuote }: Props) {
   const [query, setQuery] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -34,7 +35,10 @@ export function ProductsSection({ products, onLoad, onDuplicate, onDelete, onExp
       title="Mis productos"
       description="Piezas guardadas con su costo y el perfil que usaste."
       actions={
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn-primary text-xs" onClick={() => onQuote(null)}>
+            Presupuesto PDF
+          </button>
           <button type="button" className="btn-secondary text-xs" onClick={onExport}>
             Exportar JSON
           </button>
@@ -91,6 +95,9 @@ export function ProductsSection({ products, onLoad, onDuplicate, onDelete, onExp
                     <div className="flex shrink-0 gap-1">
                       <button type="button" className="btn-ghost text-xs" onClick={() => onLoad(p)}>
                         Cargar
+                      </button>
+                      <button type="button" className="btn-ghost text-xs" onClick={() => onQuote(p)}>
+                        Presupuestar
                       </button>
                       <button type="button" className="btn-ghost text-xs" onClick={() => onDuplicate(p)}>
                         Duplicar

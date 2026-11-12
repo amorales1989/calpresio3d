@@ -31,6 +31,7 @@ El contenido de `dist/` es estático: se puede subir tal cual a Netlify, Vercel,
 2. **Pieza** — horas, minutos, gramos, insumos extra y multiplicador de ganancia (×2 a ×5 o personalizado). Se guarda sola con debounce de 500 ms.
 3. **Resultados** — se recalculan en vivo: material, luz, desgaste, margen de error, costo total, insumos (+30 %), **total a cobrar** y **precio MercadoLibre**.
 4. **Mis productos** — guardá la pieza calculada con nombre; buscá, cargala de nuevo, duplicala o eliminala. Exportá/importá todo (perfiles + productos) como JSON. Al importar podés reemplazar o combinar.
+5. **Presupuesto PDF** — armá un presupuesto para el cliente con la pieza actual, productos guardados e ítems libres (envío, diseño…): cantidades, precios editables, datos del cliente, validez y observaciones. Se descarga como PDF (generado en el navegador con jsPDF) y muestra solo precios de venta, nunca los costos. Los datos de la empresa (nombre, teléfono, email e Instagram) y la numeración quedan guardados en el navegador.
 
 ## Fórmula
 
@@ -57,6 +58,8 @@ src/
     calc.test.ts   tests (incluye el caso de referencia: total 21742.97 / ML 25807.76)
     data.ts        monedas, símbolos, defaults e impresoras
     model.ts       tipos, valores por defecto, normalización e import/export
+    quote.ts       modelo y totales del presupuesto
+    quotePdf.ts    generación del PDF (se carga solo al descargar)
     storage.ts     acceso a localStorage envuelto en try/catch
   components/      ProfileSection, PieceSection, ResultsPanel, ProductsSection, NumberField, Section
   App.tsx          estado y persistencia
@@ -64,6 +67,6 @@ src/
 
 ## Datos guardados
 
-Claves en `localStorage`: `calc3d:profiles`, `calc3d:activeProfile`, `calc3d:piece`, `calc3d:products`.
+Claves en `localStorage`: `calc3d:profiles`, `calc3d:activeProfile`, `calc3d:piece`, `calc3d:products`, `calc3d:business`, `calc3d:quoteSeq`.
 Si el navegador bloquea el almacenamiento (modo privado, cuota llena), la app sigue funcionando y avisa.
 Los productos guardan una copia del perfil usado, así que borrar un perfil no rompe el historial.

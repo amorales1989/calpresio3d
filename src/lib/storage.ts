@@ -8,6 +8,8 @@ export const KEYS = {
   activeProfile: `${PREFIX}activeProfile`,
   piece: `${PREFIX}piece`,
   products: `${PREFIX}products`,
+  business: `${PREFIX}business`,
+  quoteSeq: `${PREFIX}quoteSeq`,
 } as const;
 
 export function readJSON<T>(key: string, fallback: T): T {
