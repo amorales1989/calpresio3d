@@ -5,6 +5,7 @@ import { newId, type Product } from "../lib/model";
 import {
   DEFAULT_VALID_DAYS,
   billableLines,
+  businessContactLines,
   lineSubtotal,
   normalizeBusiness,
   quoteTotal,
@@ -67,6 +68,8 @@ export function QuoteBuilder({ currency, current, products, initialKeys, onClose
     initialKeys.map((k) => sources.find((s) => s.key === k)).filter((s): s is QuoteSource => !!s).map(lineFrom),
   );
   const [busy, setBusy] = useState(false);
+  // Si la empresa ya está cargada se muestra resumida; si no, el formulario abierto
+  const [editingBusiness, setEditingBusiness] = useState(() => !business.name.trim());
 
   // Los datos del negocio se guardan en el navegador a medida que se escriben
   useEffect(() => {
@@ -144,6 +147,62 @@ export function QuoteBuilder({ currency, current, products, initialKeys, onClose
         </header>
 
         <div className="flex flex-col gap-6 overflow-y-auto px-5 py-5">
+          {/* ---------- negocio ---------- */}
+          {!editingBusiness ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-stone-50 px-4 py-3 dark:bg-stone-800/50">
+              <div className="min-w-0 text-sm">
+                <div className="text-xs font-medium text-stone-500">Datos de la empresa</div>
+                <div className="truncate font-semibold">{business.name}</div>
+                <div className="truncate text-xs text-stone-500">{businessContactLines(business).join(" · ")}</div>
+              </div>
+              <button type="button" className="btn-secondary shrink-0 text-xs" onClick={() => setEditingBusiness(true)}>
+                Editar
+              </button>
+            </div>
+          ) : (
+            <fieldset className="grid grid-cols-1 gap-3 rounded-xl bg-stone-50 p-4 sm:grid-cols-2 dark:bg-stone-800/50">
+              <legend className="sr-only">Datos de la empresa</legend>
+              <div className="sm:col-span-2">
+                <div className="text-sm font-semibold">Datos de la empresa</div>
+                <p className="text-xs text-stone-500">Aparecen en el encabezado del PDF y quedan guardados en este navegador.</p>
+              </div>
+              <TextField
+                label="Nombre del negocio"
+                value={business.name}
+                onChange={(name) => setBusiness((b) => ({ ...b, name }))}
+                placeholder="Ej: Impresiones 3D Morales"
+              />
+              <TextField
+                label="Teléfono / WhatsApp"
+                type="tel"
+                value={business.phone}
+                onChange={(phone) => setBusiness((b) => ({ ...b, phone }))}
+                placeholder="Ej: 11 1234-5678"
+              />
+              <TextField
+                label="Email"
+                type="email"
+                value={business.email}
+                onChange={(email) => setBusiness((b) => ({ ...b, email }))}
+                placeholder="Ej: hola@minegocio.com"
+              />
+              <TextField
+                label="Instagram"
+                prefix="@"
+                value={business.instagram}
+                onChange={(instagram) => setBusiness((b) => ({ ...b, instagram: instagram.replace(/^@+/, "") }))}
+                placeholder="mi_negocio"
+              />
+              {business.name.trim() && (
+                <div className="flex justify-end sm:col-span-2">
+                  <button type="button" className="btn-secondary text-xs" onClick={() => setEditingBusiness(false)}>
+                    Listo
+                  </button>
+                </div>
+              )}
+            </fieldset>
+          )}
+
           {/* ---------- ítems ---------- */}
           <fieldset className="flex flex-col gap-3">
             <legend className="mb-2 text-sm font-semibold">Ítems</legend>
@@ -248,41 +307,6 @@ export function QuoteBuilder({ currency, current, products, initialKeys, onClose
                 placeholder="Ej: Seña del 50 % para comenzar. Entrega en 5 días hábiles."
               />
             </div>
-          </fieldset>
-
-          {/* ---------- negocio ---------- */}
-          <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <legend className="mb-1 text-sm font-semibold">Datos de la empresa</legend>
-            <p className="-mt-1 text-xs text-stone-500 sm:col-span-2">
-              Aparecen en el encabezado del PDF y quedan guardados en este navegador.
-            </p>
-            <TextField
-              label="Nombre del negocio"
-              value={business.name}
-              onChange={(name) => setBusiness((b) => ({ ...b, name }))}
-              placeholder="Ej: Impresiones 3D Morales"
-            />
-            <TextField
-              label="Teléfono / WhatsApp"
-              type="tel"
-              value={business.phone}
-              onChange={(phone) => setBusiness((b) => ({ ...b, phone }))}
-              placeholder="Ej: 11 1234-5678"
-            />
-            <TextField
-              label="Email"
-              type="email"
-              value={business.email}
-              onChange={(email) => setBusiness((b) => ({ ...b, email }))}
-              placeholder="Ej: hola@minegocio.com"
-            />
-            <TextField
-              label="Instagram"
-              prefix="@"
-              value={business.instagram}
-              onChange={(instagram) => setBusiness((b) => ({ ...b, instagram: instagram.replace(/^@+/, "") }))}
-              placeholder="mi_negocio"
-            />
           </fieldset>
         </div>
 
