@@ -16,8 +16,6 @@ import {
   mergeById,
   newId,
   normalizePiece,
-  normalizeProduct,
-  normalizeProfile,
   parseBackup,
   type BackupData,
   type Piece,
@@ -36,35 +34,36 @@ import {
   type Pedido,
   type PedidoInput,
 } from "./lib/pedidos";
-import { LocalPedidosRepo, type PedidosRepo } from "./lib/pedidosRepo";
-import { normalizeBusiness } from "./lib/quote";
+import { startingProfiles, type Backend, type InitialData } from "./lib/backend";
+import type { BusinessInfo } from "./lib/quote";
 import { KEYS, readJSON, readString, writeJSON, writeString } from "./lib/storage";
 
-// ---------- carga inicial desde localStorage ----------
+// ---------- carga inicial ----------
 
-function loadProfiles(): Profile[] {
-  const raw = readJSON<unknown>(KEYS.profiles, null);
-  const list = Array.isArray(raw) ? raw.map(normalizeProfile).filter((p): p is Profile => p !== null) : [];
-  return list.length ? list : [defaultProfile()];
-}
-
-function loadProducts(): Product[] {
-  const raw = readJSON<unknown>(KEYS.products, null);
-  return Array.isArray(raw) ? raw.map(normalizeProduct).filter((p): p is Product => p !== null) : [];
-}
-
-function initialState() {
-  const profiles = loadProfiles();
+// El perfil activo y la pieza en curso son de cada dispositivo: quedan en el navegador
+function initialState(initial: InitialData) {
+  const profiles = startingProfiles(initial.profiles);
   const activeId = readString(KEYS.activeProfile);
   const active = profiles.find((p) => p.id === activeId) ?? profiles[0];
   return { profiles, draft: { ...active } };
 }
 
-/** Mail del negocio (se carga en "Datos de la empresa" del presupuesto): recibe el aviso de terminado. */
-const tuEmail = () => normalizeBusiness(readJSON<unknown>(KEYS.business, null)).email.trim();
-
-// Hoy los pedidos viven en el navegador; cuando esté el servidor se cambia por el repo del API.
-const pedidosRepo: PedidosRepo = new LocalPedidosRepo(tuEmail);
+/**
+ * Guarda una lista cada vez que cambia, pasándole al backend la versión anterior
+ * (el servidor solo recibe lo que cambió).
+ */
+function useSync<T>(value: T, save: (prev: T, next: T) => Promise<void>, onError: (e: unknown) => void, delayMs = 0) {
+  const saved = useRef(value);
+  useEffect(() => {
+    if (saved.current === value) return;
+    const t = window.setTimeout(() => {
+      const prev = saved.current;
+      saved.current = value;
+      save(prev, value).catch(onError);
+    }, delayMs);
+    return () => window.clearTimeout(t);
+  }, [value, save, onError, delayMs]);
+}
 
 type PedidoFormState =
   | { mode: "new"; initial: PedidoInput; origen: OrigenPedido; datosCalculo: DatosCalculo | null; origenLabel?: string }
@@ -152,12 +151,23 @@ function useToast() {
   return { msg, show };
 }
 
-export default function App() {
-  const [{ profiles: initialProfiles, draft: initialDraft }] = useState(initialState);
+interface AppProps {
+  backend: Backend;
+  initial: InitialData;
+  /** Usuario con sesión iniciada (solo con servidor). */
+  user?: string;
+  onLogout?: () => void;
+}
+
+export default function App({ backend, initial, user, onLogout }: AppProps) {
+  const pedidosRepo = backend.pedidos;
+  const [{ profiles: initialProfiles, draft: initialDraft }] = useState(() => initialState(initial));
   const [profiles, setProfiles] = useState<Profile[]>(initialProfiles);
   const [draft, setDraft] = useState<Profile>(initialDraft);
   const [piece, setPiece] = useState<Piece>(() => normalizePiece(readJSON<unknown>(KEYS.piece, null)));
-  const [products, setProducts] = useState<Product[]>(loadProducts);
+  const [products, setProducts] = useState<Product[]>(initial.products);
+  const [business, setBusiness] = useState<BusinessInfo>(initial.business);
+  const [quoteSeq, setQuoteSeq] = useState(initial.quoteSeq);
   const toast = useToast();
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [pedidoForm, setPedidoForm] = useState<PedidoFormState | null>(null);
@@ -182,8 +192,20 @@ export default function App() {
     [showToast],
   );
 
-  useEffect(() => persist(writeJSON(KEYS.profiles, profiles)), [profiles, persist]);
-  useEffect(() => persist(writeJSON(KEYS.products, products)), [products, persist]);
+  const syncError = useCallback(
+    (e: unknown) => {
+      if (!backend.remote) return persist(false);
+      showToast(e instanceof Error ? e.message : "No se pudo guardar en el servidor.", "error");
+    },
+    [backend.remote, persist, showToast],
+  );
+  const saveBusiness = useCallback((_: BusinessInfo, b: BusinessInfo) => backend.saveBusiness(b), [backend]);
+  const saveQuoteSeq = useCallback((_: number, n: number) => backend.saveQuoteSeq(n), [backend]);
+
+  useSync(profiles, backend.saveProfiles, syncError);
+  useSync(products, backend.saveProducts, syncError);
+  useSync(business, saveBusiness, syncError, 600); // se escribe letra por letra
+  useSync(quoteSeq, saveQuoteSeq, syncError);
   useEffect(() => {
     if (isSaved) writeString(KEYS.activeProfile, draft.id);
   }, [draft.id, isSaved]);
@@ -203,11 +225,7 @@ export default function App() {
 
   const [quote, setQuote] = useState<{ currency: Currency; keys: string[] } | null>(null);
 
-  // Se relee al cambiar de pantalla o cerrar el presupuesto (donde se editan los datos de la empresa)
-  const businessName = useMemo(
-    () => normalizeBusiness(readJSON<unknown>(KEYS.business, null)).name.trim(),
-    [view, quote],
-  );
+  const businessName = business.name.trim();
   const currentSource: QuoteSource | null =
     quote && quote.currency === draft.currency && results.total > 0
       ? {
@@ -459,7 +477,14 @@ export default function App() {
   return (
     <div className={`page-gutter mx-auto max-w-6xl py-6 sm:py-10 ${view === "calculadora" ? "pb-28 lg:pb-10" : ""}`}>
       <header className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="truncate text-2xl font-bold tracking-tight sm:text-3xl">{businessName || "Impresiones 3D"}</h1>
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <h1 className="truncate text-xl font-bold tracking-tight sm:text-3xl">{businessName || "Impresiones 3D"}</h1>
+          {onLogout && (
+            <button type="button" className="btn-ghost shrink-0 text-xs sm:order-last" onClick={onLogout} title={user ? `Sesión de ${user}` : undefined}>
+              Salir
+            </button>
+          )}
+        </div>
         <nav
           aria-label="Secciones"
           className="grid shrink-0 grid-cols-2 gap-1 rounded-xl border border-stone-200 bg-white p-1 sm:flex dark:border-stone-800 dark:bg-stone-900"
@@ -485,7 +510,8 @@ export default function App() {
         <main>
           <PedidosSection
             pedidos={pedidos}
-            local={pedidosRepo.local}
+            local={!backend.remote}
+            mailSimulado={!backend.mailReal}
             onNew={() =>
               setPedidoForm({ mode: "new", initial: emptyInput(draft.currency), origen: { tipo: "manual" }, datosCalculo: null })
             }
@@ -539,7 +565,9 @@ export default function App() {
       )}
 
       <footer className="mt-10 text-center text-xs text-stone-400">
-        Sin servidores: tus datos viven en este navegador. Exportá un JSON de vez en cuando como respaldo.
+        {backend.remote
+          ? "Tus datos se guardan en tu servidor: los ves igual desde el celular y la compu."
+          : "Sin servidores: tus datos viven en este navegador. Exportá un JSON de vez en cuando como respaldo."}
       </footer>
 
       {view === "calculadora" && <MobileTotalBar total={formatMoney(results.total, symbol)} />}
@@ -550,6 +578,10 @@ export default function App() {
           current={currentSource}
           products={products}
           initialKeys={quote.keys}
+          business={business}
+          onBusinessChange={setBusiness}
+          nextNumber={quoteSeq}
+          onNumberUsed={(n) => setQuoteSeq(n + 1)}
           onClose={() => setQuote(null)}
           onDone={toast.show}
         />
@@ -561,7 +593,7 @@ export default function App() {
           editing={pedidoForm.mode === "edit" ? { numero: pedidoForm.pedido.numero } : undefined}
           initial={pedidoForm.mode === "edit" ? pedidoForm.pedido : pedidoForm.initial}
           origenLabel={pedidoForm.mode === "new" ? pedidoForm.origenLabel : undefined}
-          tuEmail={tuEmail()}
+          tuEmail={business.email.trim()}
           onSubmit={submitPedido}
           onClose={() => setPedidoForm(null)}
         />

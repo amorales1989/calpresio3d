@@ -2,17 +2,16 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "resolveJsonModule": true,
     "types": ["node"],
-    "outDir": "dist",
-    "rootDir": "."
+    "noEmit": true
   },
+  // La lógica de pedidos, perfiles y productos se comparte con el front (../src/lib) y esbuild la empaqueta.
   "include": ["src", "test"]
 }

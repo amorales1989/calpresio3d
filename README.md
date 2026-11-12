@@ -5,6 +5,13 @@ Sin backend: todo se guarda en el `localStorage` del navegador.
 
 **Stack:** React 19 + TypeScript + Vite + Tailwind CSS v4 · tests con Vitest.
 
+## Con servidor (Coolify)
+
+La app puede guardar todo en un servidor propio (PostgreSQL) con login, para usarla desde el celular y la compu con los mismos datos.
+El `Dockerfile` de la raíz arma una sola imagen con la app y la API. Instrucciones de deploy en [server/README.md](server/README.md).
+
+Sin servidor (`npm run dev`, `npm run build`), la app funciona como antes: todo en el navegador.
+
 ## Cómo correrla
 
 Necesitás Node.js 20 o superior.

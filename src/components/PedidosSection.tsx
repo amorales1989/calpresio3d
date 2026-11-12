@@ -24,6 +24,7 @@ import { Section } from "./Section";
 interface Props {
   pedidos: Pedido[];
   local: boolean;
+  mailSimulado: boolean;
   onNew: () => void;
   onEdit: (p: Pedido) => void;
   onSetEstado: (p: Pedido, estado: Estado) => void;
@@ -35,7 +36,7 @@ const dateTimeFmt = new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeS
 const dayFmt = new Intl.DateTimeFormat("es-AR", { weekday: "short", day: "numeric", month: "short" });
 const fmtDia = (iso: string) => dayFmt.format(new Date(`${iso}T12:00:00`));
 
-export function PedidosSection({ pedidos, local, onNew, onEdit, onSetEstado, onReenviarAviso, onDelete }: Props) {
+export function PedidosSection({ pedidos, local, mailSimulado, onNew, onEdit, onSetEstado, onReenviarAviso, onDelete }: Props) {
   const [filtro, setFiltro] = useState<FiltroEstado>("activos");
   const [query, setQuery] = useState("");
   const [abierto, setAbierto] = useState<string | null>(null);
@@ -62,10 +63,12 @@ export function PedidosSection({ pedidos, local, onNew, onEdit, onSetEstado, onR
         </button>
       }
     >
-      {local && (
+      {(local || mailSimulado) && (
         <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
-          <span className="font-semibold">Modo de prueba:</span> los pedidos se guardan en este navegador y los avisos por mail son
-          simulados (quedan en el historial). Cuando conectemos el servidor se envían de verdad.
+          <span className="font-semibold">Modo de prueba:</span>{" "}
+          {local
+            ? "los pedidos se guardan en este navegador y los avisos por mail son simulados (quedan en el historial)."
+            : "los avisos por mail son simulados (quedan en el historial) hasta que se configure el envío de mails en el servidor."}
         </p>
       )}
 

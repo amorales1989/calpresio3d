@@ -1,4 +1,4 @@
-// Acceso a los pedidos. Hoy: localStorage. Después: el API del VPS.
+// Acceso a los pedidos guardados en el navegador. La versión con servidor está en backend.ts.
 // La UI solo conoce esta interfaz, así que cambiar de uno a otro no toca los componentes.
 import { newId } from "./model";
 import {

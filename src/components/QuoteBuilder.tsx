@@ -7,13 +7,11 @@ import {
   billableLines,
   businessContactLines,
   lineSubtotal,
-  normalizeBusiness,
   quoteTotal,
   type BusinessInfo,
   type Quote,
   type QuoteLine,
 } from "../lib/quote";
-import { KEYS, readJSON, readString, writeJSON, writeString } from "../lib/storage";
 import { NumberField } from "./NumberField";
 import { TextField } from "./TextField";
 
@@ -30,6 +28,11 @@ interface Props {
   current: QuoteSource | null; // pieza que está en la calculadora
   products: Product[];
   initialKeys: string[]; // fuentes que arrancan agregadas
+  business: BusinessInfo;
+  onBusinessChange: (b: BusinessInfo) => void;
+  nextNumber: number;
+  /** Después de descargar: el próximo presupuesto arranca en `n + 1`. */
+  onNumberUsed: (n: number) => void;
   onClose: () => void;
   onDone: (msg: string, kind?: "ok" | "error") => void;
 }
@@ -42,12 +45,7 @@ const lineFrom = (s: QuoteSource): QuoteLine => ({
   unitPrice: round2(s.unitPrice),
 });
 
-function nextQuoteNumber(): number {
-  const n = Math.floor(sanitize(Number(readString(KEYS.quoteSeq))));
-  return n > 0 ? n : 1;
-}
-
-export function QuoteBuilder({ currency, current, products, initialKeys, onClose, onDone }: Props) {
+export function QuoteBuilder({ currency, current, products, initialKeys, business, onBusinessChange, nextNumber, onNumberUsed, onClose, onDone }: Props) {
   const symbol = CURRENCY_SYMBOLS[currency];
   const money = (n: number) => formatMoney(n, symbol);
 
@@ -67,8 +65,8 @@ export function QuoteBuilder({ currency, current, products, initialKeys, onClose
   }, [products, currency, current]);
   const otherCurrency = products.length - (sources.length - (current ? 1 : 0));
 
-  const [business, setBusiness] = useState<BusinessInfo>(() => normalizeBusiness(readJSON<unknown>(KEYS.business, null)));
-  const [number, setNumber] = useState(nextQuoteNumber);
+  const setBusiness = (fn: (b: BusinessInfo) => BusinessInfo) => onBusinessChange(fn(business));
+  const [number, setNumber] = useState(() => Math.max(1, Math.floor(sanitize(nextNumber))));
   const [validDays, setValidDays] = useState(DEFAULT_VALID_DAYS);
   const [clientName, setClientName] = useState("");
   const [clientContact, setClientContact] = useState("");
@@ -79,11 +77,6 @@ export function QuoteBuilder({ currency, current, products, initialKeys, onClose
   const [busy, setBusy] = useState(false);
   // Si la empresa ya está cargada se muestra resumida; si no, el formulario abierto
   const [editingBusiness, setEditingBusiness] = useState(() => !business.name.trim());
-
-  // Los datos del negocio se guardan en el navegador a medida que se escriben
-  useEffect(() => {
-    writeJSON(KEYS.business, business);
-  }, [business]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -122,7 +115,7 @@ export function QuoteBuilder({ currency, current, products, initialKeys, onClose
     try {
       const { downloadQuotePdf } = await import("../lib/quotePdf");
       downloadQuotePdf(quote);
-      writeString(KEYS.quoteSeq, String(Math.floor(number) + 1));
+      onNumberUsed(Math.floor(number));
       onDone("Presupuesto descargado.");
       onClose();
     } catch {

@@ -1,4 +1,5 @@
 // Configuración leída de variables de entorno (ver .env.example).
+import path from "node:path";
 
 export interface MailConfig {
   host: string;
@@ -12,31 +13,26 @@ export interface MailConfig {
 export interface Config {
   port: number;
   databaseUrl: string;
-  apiToken: string;
-  /** Orígenes permitidos para CORS (vacío = solo mismo origen, detrás de Nginx). */
-  corsOrigins: string[];
-  /** Tu mail: recibe un aviso cada vez que un pedido pasa a "terminado". */
-  notifyEmail: string;
-  businessName: string;
-  businessContact: string;
-  /** null = SMTP sin configurar: los avisos se registran pero no se envían. */
+  /** Usuario y contraseña del único usuario (vos). */
+  adminUser: string;
+  adminPassword: string;
+  sessionDays: number;
+  /** Cookie solo por HTTPS. En Coolify siempre true; false solo para probar en http://localhost. */
+  cookieSecure: boolean;
+  /** Carpeta con el build del front (vite build). Vacío = no servir el front. */
+  staticDir: string;
+  /** null = SMTP sin configurar: los avisos se registran como simulados. */
   mail: MailConfig | null;
 }
-
-const list = (v: string | undefined) =>
-  (v ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const databaseUrl = env.DATABASE_URL?.trim();
   if (!databaseUrl) throw new Error("Falta DATABASE_URL (ej: postgres://usuario:clave@localhost:5432/calc3d).");
 
-  const apiToken = env.API_TOKEN?.trim() ?? "";
-  if (apiToken.length < 16) {
-    throw new Error("Falta API_TOKEN o es muy corto (mínimo 16 caracteres). Generalo con: openssl rand -hex 24");
-  }
+  const adminUser = env.ADMIN_USER?.trim() ?? "";
+  const adminPassword = env.ADMIN_PASSWORD ?? "";
+  if (!adminUser) throw new Error("Falta ADMIN_USER (el usuario para entrar a la app).");
+  if (adminPassword.length < 10) throw new Error("Falta ADMIN_PASSWORD o es muy corta (mínimo 10 caracteres).");
 
   const host = env.SMTP_HOST?.trim();
   const port = Number(env.SMTP_PORT ?? 587);
@@ -55,11 +51,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     port: Number(env.PORT ?? 3000),
     databaseUrl,
-    apiToken,
-    corsOrigins: list(env.CORS_ORIGINS),
-    notifyEmail: env.NOTIFY_EMAIL?.trim() ?? "",
-    businessName: env.BUSINESS_NAME?.trim() || "Impresiones 3D",
-    businessContact: env.BUSINESS_CONTACT?.trim() ?? "",
+    adminUser,
+    adminPassword,
+    sessionDays: Math.max(1, Number(env.SESSION_DAYS ?? 90) || 90),
+    cookieSecure: env.COOKIE_SECURE ? env.COOKIE_SECURE === "true" : env.NODE_ENV === "production",
+    staticDir: env.STATIC_DIR === undefined ? path.resolve("../dist") : env.STATIC_DIR.trim(),
     mail,
   };
 }
