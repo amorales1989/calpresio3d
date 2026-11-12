@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatMoney, round2, sanitize } from "../lib/calc";
 import { CURRENCY_SYMBOLS, type Currency } from "../lib/data";
-import { newId, type Product } from "../lib/model";
+import { newId, productDetail, type Product } from "../lib/model";
 import {
   DEFAULT_VALID_DAYS,
   billableLines,
@@ -21,6 +21,7 @@ export interface QuoteSource {
   key: string; // "current" o id de producto
   label: string;
   description: string;
+  detail: string;
   unitPrice: number;
 }
 
@@ -36,6 +37,7 @@ interface Props {
 const lineFrom = (s: QuoteSource): QuoteLine => ({
   id: newId(),
   description: s.description,
+  detail: s.detail,
   quantity: 1,
   unitPrice: round2(s.unitPrice),
 });
@@ -54,7 +56,13 @@ export function QuoteBuilder({ currency, current, products, initialKeys, onClose
     const list = products
       .filter((p) => p.profile.currency === currency)
       .sort((a, b) => a.name.localeCompare(b.name, "es"))
-      .map((p) => ({ key: p.id, label: p.name, description: p.name, unitPrice: p.results.total }));
+      .map((p) => ({
+        key: p.id,
+        label: p.material.trim() ? `${p.name} (${p.material.trim()})` : p.name,
+        description: p.name,
+        detail: productDetail(p),
+        unitPrice: p.results.total,
+      }));
     return current ? [current, ...list] : list;
   }, [products, currency, current]);
   const otherCurrency = products.length - (sources.length - (current ? 1 : 0));
@@ -88,7 +96,7 @@ export function QuoteBuilder({ currency, current, products, initialKeys, onClose
 
   function addSource(key: string) {
     if (key === "free") {
-      setLines((ls) => [...ls, { id: newId(), description: "", quantity: 1, unitPrice: 0 }]);
+      setLines((ls) => [...ls, { id: newId(), description: "", detail: "", quantity: 1, unitPrice: 0 }]);
       return;
     }
     const s = sources.find((x) => x.key === key);
@@ -237,6 +245,15 @@ export function QuoteBuilder({ currency, current, products, initialKeys, onClose
                   >
                     Quitar
                   </button>
+                </div>
+                <div className="mt-2">
+                  <TextField
+                    label="Detalle para el cliente (opcional)"
+                    value={l.detail}
+                    maxLength={200}
+                    placeholder="Ej: Material: PLA negro · 12 × 8 cm"
+                    onChange={(detail) => setLine(l.id, { detail })}
+                  />
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                   <NumberField label="Cantidad" value={l.quantity} step={1} onChange={(v) => setLine(l.id, { quantity: v })} />

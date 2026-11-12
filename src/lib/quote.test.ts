@@ -11,11 +11,13 @@ import {
   type Quote,
   type QuoteLine,
 } from "./quote";
+import { normalizeProduct, productDetail } from "./model";
 import { buildQuotePdf } from "./quotePdf";
 
-const line = (description: string, quantity: number, unitPrice: number): QuoteLine => ({
+const line = (description: string, quantity: number, unitPrice: number, detail = ""): QuoteLine => ({
   id: description,
   description,
+  detail,
   quantity,
   unitPrice,
 });
@@ -64,6 +66,17 @@ describe("presupuesto", () => {
     expect(businessContactLines(b)).toEqual(["Tel.: 11 1234-5678", "Instagram: @taller3d"]);
   });
 
+  it("arma el detalle del producto para el cliente", () => {
+    expect(productDetail({ material: " PLA negro ", description: "12 × 8 cm" })).toBe("12 × 8 cm · Material: PLA negro");
+    expect(productDetail({ material: "", description: "" })).toBe("");
+  });
+
+  it("los productos guardados antes de tener material siguen cargando", () => {
+    const p = normalizeProduct({ name: "Viejo", profile: {}, results: {} });
+    expect(p?.material).toBe("");
+    expect(p?.description).toBe("");
+  });
+
   it("genera un PDF válido", () => {
     const q: Quote = {
       number: 1,
@@ -73,7 +86,7 @@ describe("presupuesto", () => {
       business: { name: "Impresiones 3D", phone: "11 1234-5678", email: "hola@impresiones.com", instagram: "impresiones" },
       clientName: "Juan Pérez",
       clientContact: "juan@example.com",
-      lines: [line("Soporte de auriculares", 2, 21742.97), line("Envío", 1, 3500)],
+      lines: [line("Soporte de auriculares", 2, 21742.97, "12 × 8 cm · Material: PLA negro"), line("Envío", 1, 3500)],
       notes: "Seña del 50 % para comenzar.",
     };
     const out = buildQuotePdf(q).output();

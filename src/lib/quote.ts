@@ -12,6 +12,7 @@ export interface BusinessInfo {
 export interface QuoteLine {
   id: string;
   description: string;
+  detail: string; // segunda línea en gris: material, medidas…
   quantity: number;
   unitPrice: number;
 }

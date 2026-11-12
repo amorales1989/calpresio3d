@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { formatMoney, type CostResult } from "../lib/calc";
+import type { ProductInfo } from "../lib/model";
+import { ProductInfoForm } from "./ProductInfoForm";
 
 interface Props {
   results: CostResult;
   symbol: string;
   multiplier: number;
   profileName: string;
-  onSaveProduct: (name: string) => void;
+  onSaveProduct: (info: ProductInfo) => void;
   onQuote: () => void;
   onPedido: () => void;
 }
@@ -21,7 +23,6 @@ function formatHours(h: number) {
 export function ResultsPanel({ results: r, symbol, multiplier, profileName, onSaveProduct, onQuote, onPedido }: Props) {
   const money = (n: number) => formatMoney(n, symbol);
   const [saving, setSaving] = useState(false);
-  const [name, setName] = useState("");
 
   const rows: [string, number, string?][] = [
     ["Precio material", r.material],
@@ -30,16 +31,8 @@ export function ResultsPanel({ results: r, symbol, multiplier, profileName, onSa
     ["Margen de error", r.error],
   ];
 
-  function submit() {
-    const n = name.trim();
-    if (!n) return;
-    onSaveProduct(n);
-    setName("");
-    setSaving(false);
-  }
-
   return (
-    <aside className="card lg:sticky lg:top-6" aria-live="polite">
+    <aside id="resultados" className="card scroll-mt-4 lg:sticky lg:top-6" aria-live="polite">
       <div className="mb-4 flex items-baseline justify-between gap-2">
         <h2 className="text-base font-semibold">Resultados</h2>
         <span className="truncate text-xs text-stone-500" title={profileName}>
@@ -56,7 +49,7 @@ export function ResultsPanel({ results: r, symbol, multiplier, profileName, onSa
         ))}
         <div className="flex justify-between gap-4 py-2.5 font-semibold">
           <dt>Costo total (sin insumos)</dt>
-          <dd className="tabular-nums">{money(r.costo)}</dd>
+          <dd className="whitespace-nowrap tabular-nums">{money(r.costo)}</dd>
         </div>
         <div className="flex justify-between gap-4 py-2">
           <dt className="text-stone-600 dark:text-stone-400">Insumos (+30%)</dt>
@@ -82,35 +75,14 @@ export function ResultsPanel({ results: r, symbol, multiplier, profileName, onSa
 
       <div className="mt-5">
         {saving ? (
-          <form
-            className="flex flex-col gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              submit();
+          <ProductInfoForm
+            submitLabel="Guardar producto"
+            onSubmit={(info) => {
+              onSaveProduct(info);
+              setSaving(false);
             }}
-          >
-            <label htmlFor="product-name" className="text-xs font-medium text-stone-600 dark:text-stone-400">
-              Nombre del producto
-            </label>
-            <input
-              id="product-name"
-              autoFocus
-              className="field-input"
-              placeholder="Ej: Soporte de auriculares"
-              maxLength={80}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && setSaving(false)}
-            />
-            <div className="flex gap-2">
-              <button type="submit" className="btn-primary flex-1" disabled={!name.trim()}>
-                Guardar
-              </button>
-              <button type="button" className="btn-secondary" onClick={() => setSaving(false)}>
-                Cancelar
-              </button>
-            </div>
-          </form>
+            onCancel={() => setSaving(false)}
+          />
         ) : (
           <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-2 sm:flex-row lg:flex-col xl:flex-row">

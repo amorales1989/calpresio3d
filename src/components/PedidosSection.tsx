@@ -54,7 +54,6 @@ export function PedidosSection({ pedidos, local, onNew, onEdit, onSetEstado, onR
 
   return (
     <Section
-      step={4}
       title="Pedidos"
       description="Seguí cada pedido hasta la entrega. Al pasarlo a Terminado se avisa por mail."
       actions={

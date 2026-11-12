@@ -26,10 +26,20 @@ export interface Piece {
 export interface Product {
   id: string;
   name: string;
+  material: string; // ej. "PLA negro"; se muestra al cliente en el presupuesto
+  description: string; // detalle opcional para el cliente (medidas, terminación…)
   createdAt: string; // ISO
   piece: Piece;
   profile: Profile; // copia del perfil usado
   results: CostResult;
+}
+
+/** Datos del producto que se cargan o editan a mano. */
+export type ProductInfo = Pick<Product, "name" | "material" | "description">;
+
+/** Detalle que ve el cliente debajo del nombre: "Detalle · Material: PLA negro". */
+export function productDetail(p: Pick<Product, "material" | "description">): string {
+  return [p.description.trim(), p.material.trim() && `Material: ${p.material.trim()}`].filter(Boolean).join(" · ");
 }
 
 export interface BackupData {
@@ -119,6 +129,8 @@ export function normalizeProduct(v: unknown): Product | null {
   return {
     id: str(v.id, newId()),
     name: str(v.name, "Producto sin nombre"),
+    material: typeof v.material === "string" ? v.material : "",
+    description: typeof v.description === "string" ? v.description : "",
     createdAt: date,
     piece: normalizePiece(v.piece),
     profile,

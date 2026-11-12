@@ -22,6 +22,7 @@ import {
   type BackupData,
   type Piece,
   type Product,
+  type ProductInfo,
   type Profile,
 } from "./lib/model";
 import {
@@ -76,7 +77,67 @@ function avisoMsg(p: Pedido, aviso: Aviso): string {
   return `${n} terminado · aviso${aviso.simulado ? " simulado" : ""} por mail a ${quien}.`;
 }
 
+// ---------- pantallas: pedidos (inicio) y calculadora ----------
+
+type View = "pedidos" | "calculadora";
+
+const VIEWS: { key: View; label: string; hash: string }[] = [
+  { key: "pedidos", label: "Pedidos", hash: "#/pedidos" },
+  { key: "calculadora", label: "Calculadora", hash: "#/calculadora" },
+];
+
+// Se usa el hash para que funcionen "atrás" y los marcadores sin configurar el hosting
+const viewFromHash = (): View => (window.location.hash === "#/calculadora" ? "calculadora" : "pedidos");
+
+function useView() {
+  const [view, setView] = useState<View>(viewFromHash);
+  useEffect(() => {
+    const onHash = () => {
+      setView(viewFromHash());
+      window.scrollTo({ top: 0 });
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  const go = useCallback((v: View) => {
+    window.location.hash = VIEWS.find((x) => x.key === v)!.hash;
+  }, []);
+  return [view, go] as const;
+}
+
 const sameProfile = (a: Profile, b: Profile) => JSON.stringify(a) === JSON.stringify(b);
+
+// ---------- total fijo abajo (solo celular) ----------
+
+/** Muestra el total mientras se cargan los datos de la pieza; se oculta cuando Resultados ya está a la vista. */
+function MobileTotalBar({ total }: { total: string }) {
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    const el = document.getElementById("resultados");
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => setHidden(e.isIntersecting), { threshold: 0.25 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  if (hidden) return null;
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden dark:border-stone-800 dark:bg-stone-900/95">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs font-medium uppercase tracking-wide text-stone-500">Total a cobrar</div>
+          <div className="truncate text-xl font-bold tabular-nums text-teal-800 dark:text-teal-300">{total}</div>
+        </div>
+        <button
+          type="button"
+          className="btn-primary shrink-0"
+          onClick={() => document.getElementById("resultados")?.scrollIntoView({ behavior: "smooth" })}
+        >
+          Ver detalle
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ---------- toast mínimo ----------
 
@@ -102,6 +163,7 @@ export default function App() {
   const [pedidoForm, setPedidoForm] = useState<PedidoFormState | null>(null);
   const showToast = toast.show;
   const dialog = useDialog();
+  const [view, goTo] = useView();
 
   const saved = profiles.find((p) => p.id === draft.id);
   const isSaved = saved !== undefined;
@@ -140,12 +202,19 @@ export default function App() {
   // ---------- presupuesto ----------
 
   const [quote, setQuote] = useState<{ currency: Currency; keys: string[] } | null>(null);
+
+  // Se relee al cambiar de pantalla o cerrar el presupuesto (donde se editan los datos de la empresa)
+  const businessName = useMemo(
+    () => normalizeBusiness(readJSON<unknown>(KEYS.business, null)).name.trim(),
+    [view, quote],
+  );
   const currentSource: QuoteSource | null =
     quote && quote.currency === draft.currency && results.total > 0
       ? {
           key: "current",
           label: `Pieza actual (calculadora) — ${formatMoney(results.total, symbol)}`,
           description: "Pieza impresa en 3D",
+          detail: "",
           unitPrice: results.total,
         }
       : null;
@@ -203,17 +272,22 @@ export default function App() {
 
   // ---------- productos ----------
 
-  function saveProduct(name: string) {
+  function saveProduct(info: ProductInfo) {
     const product: Product = {
       id: newId(),
-      name,
+      ...info,
       createdAt: new Date().toISOString(),
       piece: { ...piece },
       profile: { ...draft },
       results: { ...results },
     };
     setProducts((list) => [product, ...list]);
-    toast.show(`“${name}” guardado en Mis productos.`);
+    toast.show(`“${info.name}” guardado en Mis productos.`);
+  }
+
+  function updateProduct(id: string, info: ProductInfo) {
+    setProducts((list) => list.map((x) => (x.id === id ? { ...x, ...info } : x)));
+    toast.show("Producto actualizado.");
   }
 
   async function loadProduct(p: Product) {
@@ -261,7 +335,7 @@ export default function App() {
   function pedidoDesdeProducto(p: Product) {
     setPedidoForm({
       mode: "new",
-      initial: { ...emptyInput(p.profile.currency), descripcion: p.name, precioUnitario: round2(p.results.total) },
+      initial: { ...emptyInput(p.profile.currency), descripcion: p.material.trim() ? `${p.name} (${p.material.trim()})` : p.name, precioUnitario: round2(p.results.total) },
       origen: { tipo: "producto", productoId: p.id, nombre: p.name },
       datosCalculo: { piece: p.piece, profile: p.profile, results: p.results },
       origenLabel: `Producto “${p.name}”`,
@@ -278,6 +352,7 @@ export default function App() {
         const p = await pedidosRepo.create({ input, estado, origen: pedidoForm.origen, datosCalculo: pedidoForm.datosCalculo });
         upsertPedido(p);
         toast.show(`Pedido ${formatNumeroPedido(p.numero)} creado.`);
+        goTo("pedidos");
       }
       setPedidoForm(null);
     } catch (e) {
@@ -382,52 +457,32 @@ export default function App() {
   }
 
   return (
-    <div className="page-gutter mx-auto max-w-6xl py-6 sm:py-10">
-      <header className="mb-6 sm:mb-8">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Calculadora de impresiones 3D</h1>
-        <p className="mt-1 text-sm text-stone-500">Costo real y precio de venta de cada pieza. Todo queda guardado en tu navegador.</p>
+    <div className={`page-gutter mx-auto max-w-6xl py-6 sm:py-10 ${view === "calculadora" ? "pb-28 lg:pb-10" : ""}`}>
+      <header className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="truncate text-2xl font-bold tracking-tight sm:text-3xl">{businessName || "Impresiones 3D"}</h1>
+        <nav
+          aria-label="Secciones"
+          className="grid shrink-0 grid-cols-2 gap-1 rounded-xl border border-stone-200 bg-white p-1 sm:flex dark:border-stone-800 dark:bg-stone-900"
+        >
+          {VIEWS.map((v) => (
+            <a
+              key={v.key}
+              href={v.hash}
+              aria-current={view === v.key ? "page" : undefined}
+              className={`rounded-lg px-4 py-2 text-center text-sm font-medium transition sm:py-1.5 ${
+                view === v.key
+                  ? "bg-teal-700 text-white dark:bg-teal-500 dark:text-stone-950"
+                  : "text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100"
+              }`}
+            >
+              {v.label}
+            </a>
+          ))}
+        </nav>
       </header>
 
-      <main className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="flex flex-col gap-6">
-          <ProfileSection
-            profiles={profiles}
-            draft={draft}
-            isSaved={isSaved}
-            isDirty={isDirty}
-            onDraftChange={setDraft}
-            onSelect={selectProfile}
-            onNew={newProfile}
-            onSave={saveProfile}
-            onDelete={deleteProfile}
-          />
-          <PieceSection piece={piece} symbol={symbol} onChange={setPiece} onReset={() => setPiece(defaultPiece())} />
-        </div>
-
-        <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
-          <ResultsPanel
-            results={results}
-            symbol={symbol}
-            multiplier={piece.profitMultiplier}
-            profileName={draft.name || "Sin nombre"}
-            onSaveProduct={saveProduct}
-            onQuote={() => setQuote({ currency: draft.currency, keys: ["current"] })}
-            onPedido={pedidoDesdeCalculadora}
-          />
-        </div>
-
-        <ProductsSection
-          products={products}
-          onLoad={loadProduct}
-          onDuplicate={duplicateProduct}
-          onDelete={deleteProduct}
-          onExport={exportAll}
-          onImport={importAll}
-          onPedido={pedidoDesdeProducto}
-          onQuote={(p) => setQuote(p ? { currency: p.profile.currency, keys: [p.id] } : { currency: draft.currency, keys: [] })}
-        />
-
-        <div className="lg:col-span-2">
+      {view === "pedidos" ? (
+        <main>
           <PedidosSection
             pedidos={pedidos}
             local={pedidosRepo.local}
@@ -439,12 +494,55 @@ export default function App() {
             onReenviarAviso={reenviarAviso}
             onDelete={deletePedido}
           />
-        </div>
-      </main>
+        </main>
+      ) : (
+        <main className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="flex flex-col gap-6">
+            <ProfileSection
+              profiles={profiles}
+              draft={draft}
+              isSaved={isSaved}
+              isDirty={isDirty}
+              onDraftChange={setDraft}
+              onSelect={selectProfile}
+              onNew={newProfile}
+              onSave={saveProfile}
+              onDelete={deleteProfile}
+            />
+            <PieceSection piece={piece} symbol={symbol} onChange={setPiece} onReset={() => setPiece(defaultPiece())} />
+          </div>
+
+          <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+            <ResultsPanel
+              results={results}
+              symbol={symbol}
+              multiplier={piece.profitMultiplier}
+              profileName={draft.name || "Sin nombre"}
+              onSaveProduct={saveProduct}
+              onQuote={() => setQuote({ currency: draft.currency, keys: ["current"] })}
+              onPedido={pedidoDesdeCalculadora}
+            />
+          </div>
+
+          <ProductsSection
+            products={products}
+            onLoad={loadProduct}
+            onDuplicate={duplicateProduct}
+          onUpdate={updateProduct}
+            onDelete={deleteProduct}
+            onExport={exportAll}
+            onImport={importAll}
+            onPedido={pedidoDesdeProducto}
+            onQuote={(p) => setQuote(p ? { currency: p.profile.currency, keys: [p.id] } : { currency: draft.currency, keys: [] })}
+          />
+        </main>
+      )}
 
       <footer className="mt-10 text-center text-xs text-stone-400">
         Sin servidores: tus datos viven en este navegador. Exportá un JSON de vez en cuando como respaldo.
       </footer>
+
+      {view === "calculadora" && <MobileTotalBar total={formatMoney(results.total, symbol)} />}
 
       {quote && (
         <QuoteBuilder
@@ -474,7 +572,7 @@ export default function App() {
       {toast.msg && (
         <div
           role="status"
-          className={`fixed bottom-4 left-1/2 z-50 max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg ${
+          className={`fixed bottom-24 left-1/2 lg:bottom-4 z-50 max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg ${
             toast.msg.kind === "error"
               ? "bg-red-700 text-white"
               : "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"

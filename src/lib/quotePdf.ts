@@ -79,13 +79,28 @@ export function buildQuotePdf(q: Quote): jsPDF {
     startY: y,
     margin: { left: M, right: M },
     head: [["Descripción", "Cant.", "Precio unit.", "Subtotal"]],
-    body: lines.map((l) => [l.description.trim() || "—", qtyFmt(l.quantity), money(l.unitPrice), money(lineSubtotal(l))]),
+    // Cada ítem es una fila; si tiene detalle, va debajo en una fila gris que ocupa todo el ancho
+    body: lines.flatMap((l) => {
+      const detail = l.detail.trim();
+      const tight = detail ? { cellPadding: { top: 3, bottom: 0.5, left: 2, right: 2 }, lineWidth: 0 } : {};
+      const row = [l.description.trim() || "—", qtyFmt(l.quantity), money(l.unitPrice), money(lineSubtotal(l))].map(
+        (content) => ({ content, styles: tight }),
+      );
+      if (!detail) return [row];
+      return [row, [{ content: detail, colSpan: 4, styles: { fontSize: 8.5, textColor: MUTED, cellPadding: { top: 0, bottom: 3, left: 2, right: 2 } } }]];
+    }),
     foot: [["", "", "Total", money(quoteTotal(q.lines))]],
     theme: "plain",
-    styles: { font: "helvetica", fontSize: 10, textColor: DARK, cellPadding: { top: 3, bottom: 3, left: 2, right: 2 } },
+    styles: {
+      font: "helvetica",
+      fontSize: 10,
+      textColor: DARK,
+      cellPadding: { top: 3, bottom: 3, left: 2, right: 2 },
+      lineColor: [231, 229, 228],
+      lineWidth: { bottom: 0.2 },
+    },
     headStyles: { fillColor: TEAL, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9 },
     footStyles: { fontStyle: "bold", fontSize: 12, textColor: DARK },
-    alternateRowStyles: { fillColor: [245, 245, 244] },
     columnStyles: {
       1: { halign: "right", cellWidth: 18 },
       2: { halign: "right", cellWidth: 36 },
