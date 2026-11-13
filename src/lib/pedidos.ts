@@ -20,6 +20,12 @@ export type Estado = (typeof ESTADOS)[number];
 
 export const isEstado = (v: unknown): v is Estado => typeof v === "string" && (ESTADOS as readonly string[]).includes(v);
 
+/**
+ * Avisos por mail al pasar a Terminado. Apagados por ahora: no se manda nada y la pantalla no los muestra.
+ * El servidor tiene su propio interruptor (variable AVISOS_MAIL=true).
+ */
+export const AVISOS_POR_MAIL = false;
+
 /** Estado que dispara el aviso por mail. */
 export const ESTADO_AVISO: Estado = "terminado";
 
@@ -266,7 +272,7 @@ export function destinatariosAviso(p: Pick<Pedido, "clienteEmail" | "notificarCl
 export function cambiarEstado(
   p: Pedido,
   estado: Estado,
-  opts: { eventoIds: [string, string]; tuEmail: string; simulado: boolean; nota?: string },
+  opts: { eventoIds: [string, string]; tuEmail: string; simulado: boolean; nota?: string; avisar?: boolean },
   now = new Date().toISOString(),
 ): { pedido: Pedido; aviso: Aviso | null } {
   if (estado === p.estado) return { pedido: p, aviso: null };
@@ -281,7 +287,7 @@ export function cambiarEstado(
     terminadoAt: estado === "terminado" ? (p.terminadoAt ?? now) : p.terminadoAt,
     historial,
   };
-  if (estado !== ESTADO_AVISO || p.avisoAt) return { pedido, aviso: null };
+  if (opts.avisar === false || estado !== ESTADO_AVISO || p.avisoAt) return { pedido, aviso: null };
   return registrarAviso(pedido, opts.eventoIds[1], opts.tuEmail, opts.simulado, now);
 }
 

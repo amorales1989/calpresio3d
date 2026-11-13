@@ -55,7 +55,7 @@ describe.skipIf(!url)("API", () => {
   });
 
   beforeAll(async () => {
-    const cfg = loadConfig({ DATABASE_URL: url, ADMIN_USER: "ale", ADMIN_PASSWORD: "clave-de-prueba-123", STATIC_DIR: "" });
+    const cfg = loadConfig({ DATABASE_URL: url, ADMIN_USER: "ale", ADMIN_PASSWORD: "clave-de-prueba-123", STATIC_DIR: "", AVISOS_MAIL: "true" });
     db = createDb(cfg.databaseUrl);
     await db.query("drop schema public cascade; create schema public;");
     await migrate(db);
@@ -174,6 +174,26 @@ describe.skipIf(!url)("API", () => {
     expect(e.body.historial.at(-1).tipo).toBe("editado");
     expect((await call("DELETE", `/api/pedidos/${p.id}`)).status).toBe(204);
     expect((await call("PUT", `/api/pedidos/${p.id}`, { input: input() })).status).toBe(404);
+  });
+
+  it("con los avisos apagados (por defecto) no manda ningún mail", async () => {
+    expect(loadConfig({ DATABASE_URL: url, ADMIN_USER: "ale", ADMIN_PASSWORD: "clave-de-prueba-123" }).avisosMail).toBe(false);
+    const cfg = loadConfig({ DATABASE_URL: url, ADMIN_USER: "ale", ADMIN_PASSWORD: "clave-de-prueba-123", STATIC_DIR: "" });
+    const otro = createApp({ cfg, db, mailer }).listen(0);
+    const baseAntes = base;
+    base = `http://127.0.0.1:${(otro.address() as AddressInfo).port}`;
+    try {
+      const p = (await call("POST", "/api/pedidos", { input: input() })).body;
+      const r = await call("POST", `/api/pedidos/${p.id}/estado`, { estado: "terminado" });
+      expect(r.body.pedido.estado).toBe("terminado");
+      expect(r.body.aviso).toBeNull();
+      expect(r.body.pedido.avisoAt).toBeNull();
+      expect((await call("POST", `/api/pedidos/${p.id}/aviso`, {})).status).toBe(400);
+      expect(mailer.sent).toHaveLength(0);
+    } finally {
+      base = baseAntes;
+      otro.close();
+    }
   });
 
   it("importa los datos del navegador sin pisar números de pedido", async () => {

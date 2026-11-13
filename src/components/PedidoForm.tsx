@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from "react";
 import { formatMoney } from "../lib/calc";
 import { CURRENCIES, CURRENCY_SYMBOLS, type Currency } from "../lib/data";
 import {
+  AVISOS_POR_MAIL,
   ESTADOS,
   ESTADO_LABEL,
   formatNumeroPedido,
@@ -173,38 +174,40 @@ export function PedidoForm({ editing, initial, origenLabel, tuEmail, products, o
             </div>
           </fieldset>
 
-          {/* ---------- aviso ---------- */}
-          <fieldset className="rounded-xl border border-stone-200 p-4 dark:border-stone-800">
-            <legend className="px-1 text-sm font-semibold">Aviso al terminar</legend>
-            <ul className="flex flex-col gap-2 text-sm">
-              <li className="flex items-start gap-2">
-                <span aria-hidden className="mt-0.5">✉️</span>
-                {isEmail(tuEmail) ? (
-                  <span>
-                    Te llega un mail a <span className="font-medium">{tuEmail}</span> cuando lo pases a <em>Terminado</em>.
-                  </span>
-                ) : (
-                  <span className="text-amber-800 dark:text-amber-300">
-                    Cargá tu email en <span className="font-medium">Datos de la empresa</span> (en Presupuesto PDF) para recibir el aviso.
-                  </span>
-                )}
-              </li>
-              <li className="flex items-start gap-2">
-                <input
-                  id={ids.notify}
-                  type="checkbox"
-                  className="mt-1 size-4 accent-teal-700"
-                  checked={clientEmailOk && v.notificarCliente}
-                  disabled={!clientEmailOk}
-                  onChange={(e) => set("notificarCliente", e.target.checked)}
-                />
-                <label htmlFor={ids.notify} className={clientEmailOk ? "" : "text-stone-500"}>
-                  Avisarle también al cliente
-                  {!clientEmailOk && <span className="block text-xs">Necesita un email válido del cliente.</span>}
-                </label>
-              </li>
-            </ul>
-          </fieldset>
+          {/* ---------- aviso (apagado mientras AVISOS_POR_MAIL sea false) ---------- */}
+          {AVISOS_POR_MAIL && (
+            <fieldset className="rounded-xl border border-stone-200 p-4 dark:border-stone-800">
+              <legend className="px-1 text-sm font-semibold">Aviso al terminar</legend>
+              <ul className="flex flex-col gap-2 text-sm">
+                <li className="flex items-start gap-2">
+                  <span aria-hidden className="mt-0.5">✉️</span>
+                  {isEmail(tuEmail) ? (
+                    <span>
+                      Te llega un mail a <span className="font-medium">{tuEmail}</span> cuando lo pases a <em>Terminado</em>.
+                    </span>
+                  ) : (
+                    <span className="text-amber-800 dark:text-amber-300">
+                      Cargá tu email en <span className="font-medium">Datos de la empresa</span> (en Presupuesto PDF) para recibir el aviso.
+                    </span>
+                  )}
+                </li>
+                <li className="flex items-start gap-2">
+                  <input
+                    id={ids.notify}
+                    type="checkbox"
+                    className="mt-1 size-4 accent-teal-700"
+                    checked={clientEmailOk && v.notificarCliente}
+                    disabled={!clientEmailOk}
+                    onChange={(e) => set("notificarCliente", e.target.checked)}
+                  />
+                  <label htmlFor={ids.notify} className={clientEmailOk ? "" : "text-stone-500"}>
+                    Avisarle también al cliente
+                    {!clientEmailOk && <span className="block text-xs">Necesita un email válido del cliente.</span>}
+                  </label>
+                </li>
+              </ul>
+            </fieldset>
+          )}
         </div>
 
         <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-stone-100 px-5 py-4 dark:border-stone-800">

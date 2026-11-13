@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { formatMoney } from "../lib/calc";
 import { CURRENCY_SYMBOLS } from "../lib/data";
 import {
+  AVISOS_POR_MAIL,
   ESTADOS,
   ESTADO_LABEL,
   contarPorEstado,
@@ -46,7 +47,6 @@ export function PedidosSection({ pedidos, local, mailSimulado, onNew, onEdit, on
   const conteo = useMemo(() => contarPorEstado(pedidos), [pedidos]);
   const activos = pedidos.filter((p) => esActivo(p.estado)).length;
   const hoy = hoyISO();
-  const atrasados = pedidos.filter((p) => urgencia(p, hoy) === "atrasado").length;
   const lista = useMemo(() => ordenarPedidos(filtrarPedidos(pedidos, filtro, query)), [pedidos, filtro, query]);
 
   const chips: { key: FiltroEstado; label: string; n: number; dot?: string }[] = [
@@ -58,18 +58,18 @@ export function PedidosSection({ pedidos, local, mailSimulado, onNew, onEdit, on
   return (
     <Section
       title="Pedidos"
-      description="Seguí cada pedido hasta la entrega. Al pasarlo a Terminado se avisa por mail."
+      description={`Seguí cada pedido hasta la entrega.${AVISOS_POR_MAIL ? " Al pasarlo a Terminado se avisa por mail." : ""}`}
       actions={
         <button type="button" className="btn-primary text-xs" onClick={onNew}>
           + Nuevo pedido
         </button>
       }
     >
-      {(local || mailSimulado) && (
+      {(local || (AVISOS_POR_MAIL && mailSimulado)) && (
         <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
           <span className="font-semibold">Modo de prueba:</span>{" "}
           {local
-            ? "los pedidos se guardan en este navegador y los avisos por mail son simulados (quedan en el historial)."
+            ? `los pedidos se guardan en este navegador${AVISOS_POR_MAIL ? " y los avisos por mail son simulados (quedan en el historial)" : ""}.`
             : "los avisos por mail son simulados (quedan en el historial) hasta que se configure el envío de mails en el servidor."}
         </p>
       )}
@@ -84,14 +84,6 @@ export function PedidosSection({ pedidos, local, mailSimulado, onNew, onEdit, on
         </div>
       ) : (
         <>
-          {/* ---------- resumen ---------- */}
-          <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Stat label="Activos" value={activos} />
-            <Stat label="Imprimiendo" value={conteo.imprimiendo} />
-            <Stat label="Listos para entregar" value={conteo.terminado} tone={conteo.terminado ? "ok" : undefined} />
-            <Stat label="Atrasados" value={atrasados} tone={atrasados ? "bad" : undefined} />
-          </div>
-
           {/* ---------- filtros ---------- */}
           <div className="-mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Filtrar por estado">
             {chips.map((c) => {
@@ -153,21 +145,6 @@ export function PedidosSection({ pedidos, local, mailSimulado, onNew, onEdit, on
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone?: "ok" | "bad" }) {
-  const color =
-    tone === "bad"
-      ? "text-red-700 dark:text-red-400"
-      : tone === "ok"
-        ? "text-emerald-700 dark:text-emerald-400"
-        : "text-stone-900 dark:text-stone-100";
-  return (
-    <div className="rounded-xl bg-stone-50 px-3 py-2.5 dark:bg-stone-800/50">
-      <div className={`text-xl font-bold tabular-nums ${color}`}>{value}</div>
-      <div className="text-xs text-stone-500">{label}</div>
-    </div>
-  );
-}
-
 const URG_LABEL = { atrasado: "Atrasado", hoy: "Vence hoy", pronto: "Vence pronto" } as const;
 const URG_CLASS = {
   atrasado: "text-red-700 dark:text-red-400 font-semibold",
@@ -226,11 +203,11 @@ function PedidoRow({
             )}
             {p.clienteTelefono && <span>☎ {p.clienteTelefono}</span>}
             {p.clienteEmail && (
-              <span title={p.notificarCliente ? "Se le avisa al terminar" : "No se le avisa"}>
-                {p.notificarCliente ? "✉️" : "✉"} {p.clienteEmail}
+              <span title={AVISOS_POR_MAIL ? (p.notificarCliente ? "Se le avisa al terminar" : "No se le avisa") : undefined}>
+                {AVISOS_POR_MAIL && p.notificarCliente ? "✉️" : "✉"} {p.clienteEmail}
               </span>
             )}
-            {p.avisoAt && <span className="text-emerald-700 dark:text-emerald-400">Avisado {dateTimeFmt.format(new Date(p.avisoAt))}</span>}
+            {AVISOS_POR_MAIL && p.avisoAt && <span className="text-emerald-700 dark:text-emerald-400">Avisado {dateTimeFmt.format(new Date(p.avisoAt))}</span>}
           </div>
         </div>
 
@@ -272,7 +249,7 @@ function PedidoRow({
         <button type="button" className="btn-ghost text-xs" onClick={onEdit}>
           Editar
         </button>
-        {(p.estado === "terminado" || p.avisoAt) && (
+        {AVISOS_POR_MAIL && (p.estado === "terminado" || p.avisoAt) && (
           <button type="button" className="btn-ghost text-xs" onClick={onReenviarAviso}>
             Reenviar aviso
           </button>

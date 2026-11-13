@@ -23,6 +23,8 @@ export interface Config {
   staticDir: string;
   /** null = SMTP sin configurar: los avisos se registran como simulados. */
   mail: MailConfig | null;
+  /** Avisos por mail al pasar a Terminado (AVISOS_MAIL=true). Apagados por defecto: no se manda nada. */
+  avisosMail: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -57,5 +59,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cookieSecure: env.COOKIE_SECURE ? env.COOKIE_SECURE === "true" : env.NODE_ENV === "production",
     staticDir: env.STATIC_DIR === undefined ? path.resolve("../dist") : env.STATIC_DIR.trim(),
     mail,
+    avisosMail: env.AVISOS_MAIL === "true",
   };
 }

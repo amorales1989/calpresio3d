@@ -2,6 +2,7 @@
 // La UI solo conoce esta interfaz, así que cambiar de uno a otro no toca los componentes.
 import { newId } from "./model";
 import {
+  AVISOS_POR_MAIL,
   cambiarEstado as aplicarCambioEstado,
   crearPedido,
   editarPedido,
@@ -104,6 +105,7 @@ export class LocalPedidosRepo implements PedidosRepo {
       tuEmail: this.tuEmail(),
       simulado: true,
       nota,
+      avisar: AVISOS_POR_MAIL,
     });
     this.replace(list, res.pedido);
     return res;

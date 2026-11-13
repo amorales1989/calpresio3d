@@ -303,7 +303,7 @@ export function createApp({ cfg, db, mailer }: Deps) {
     const out = await tx(db, async (c) => {
       const antes = await lockPedido(c, req.params.id as string);
       const business = await getBusiness(c);
-      const r = cambiarEstado(antes, estado, { eventoIds: [randomUUID(), randomUUID()], tuEmail: business.email, simulado: !mailer, nota });
+      const r = cambiarEstado(antes, estado, { eventoIds: [randomUUID(), randomUUID()], tuEmail: business.email, simulado: !mailer, nota, avisar: cfg.avisosMail });
       const final = r.aviso ? await entregarAviso(antes, { pedido: r.pedido, aviso: r.aviso }, business) : r;
       await savePedido(c, final.pedido);
       return final;
@@ -312,6 +312,7 @@ export function createApp({ cfg, db, mailer }: Deps) {
   });
 
   api.post("/pedidos/:id/aviso", async (req, res) => {
+    if (!cfg.avisosMail) throw new HttpError(400, "Los avisos por mail están desactivados.");
     const out = await tx(db, async (c) => {
       const antes = await lockPedido(c, req.params.id as string);
       const business = await getBusiness(c);
