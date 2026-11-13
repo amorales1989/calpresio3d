@@ -543,6 +543,7 @@ export default function App({ backend, initial, user, onLogout }: AppProps) {
           <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
             <ResultsPanel
               results={results}
+              ml={draft}
               symbol={symbol}
               multiplier={piece.profitMultiplier}
               profileName={draft.name || "Sin nombre"}

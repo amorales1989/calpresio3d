@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { formatMoney, type CostResult } from "../lib/calc";
+import { desgloseML, formatMoney, type CostResult, type MLInputs } from "../lib/calc";
 import type { ProductInfo } from "../lib/model";
 import { ProductInfoForm } from "./ProductInfoForm";
 
 interface Props {
   results: CostResult;
+  /** Costos de MercadoLibre del perfil, para el desglose. */
+  ml: MLInputs;
   symbol: string;
   multiplier: number;
   profileName: string;
@@ -20,7 +22,7 @@ function formatHours(h: number) {
   return `${hh} h ${mm.toString().padStart(2, "0")} min`;
 }
 
-export function ResultsPanel({ results: r, symbol, multiplier, profileName, onSaveProduct, onQuote, onPedido }: Props) {
+export function ResultsPanel({ results: r, ml, symbol, multiplier, profileName, onSaveProduct, onQuote, onPedido }: Props) {
   const money = (n: number) => formatMoney(n, symbol);
   const [saving, setSaving] = useState(false);
 
@@ -68,9 +70,9 @@ export function ResultsPanel({ results: r, symbol, multiplier, profileName, onSa
       <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-500/40 dark:bg-amber-500/10">
         <div className="flex items-center justify-between text-xs font-medium uppercase tracking-wide text-amber-800 dark:text-amber-300">
           <span>Precio MercadoLibre</span>
-          <span className="normal-case tracking-normal opacity-80">×{(multiplier + 0.8).toLocaleString("es-AR", { maximumFractionDigits: 2 })} por comisiones</span>
         </div>
         <div className="mt-1 break-all text-2xl font-bold tabular-nums text-amber-900 dark:text-amber-200">{money(r.precioML)}</div>
+        {r.precioML > 0 && <DesgloseMLList d={desgloseML(r.precioML, ml)} ml={ml} money={money} />}
       </div>
 
       <div className="mt-5">
@@ -100,5 +102,30 @@ export function ResultsPanel({ results: r, symbol, multiplier, profileName, onSa
         )}
       </div>
     </aside>
+  );
+}
+
+function DesgloseMLList({ d, ml, money }: { d: ReturnType<typeof desgloseML>; ml: MLInputs; money: (n: number) => string }) {
+  const filas: [string, number][] = [
+    [`Comisión ${ml.mlComisionPct.toLocaleString("es-AR")} % + IVA`, d.comision],
+    ["Cargo fijo + IVA", d.cargoFijo],
+    ["Envío", d.envio],
+    [`Ingresos Brutos ${ml.mlIibbPct.toLocaleString("es-AR")} %`, d.iibb],
+  ];
+  return (
+    <dl className="mt-2 flex flex-col gap-0.5 border-t border-amber-200 pt-2 text-xs text-amber-900 dark:border-amber-500/30 dark:text-amber-200">
+      {filas
+        .filter(([, v]) => v > 0)
+        .map(([label, v]) => (
+          <div key={label} className="flex justify-between gap-3">
+            <dt className="opacity-80">{label}</dt>
+            <dd className="tabular-nums">− {money(v)}</dd>
+          </div>
+        ))}
+      <div className="flex justify-between gap-3 font-semibold">
+        <dt>Te queda</dt>
+        <dd className="tabular-nums">{money(d.neto)}</dd>
+      </div>
+    </dl>
   );
 }

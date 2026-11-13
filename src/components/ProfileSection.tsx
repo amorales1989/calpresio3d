@@ -161,6 +161,46 @@ export function ProfileSection({ profiles, draft, isSaved, isDirty, onDraftChang
           <NumberField label="Vida útil de la máquina" suffix="h" step={10} value={draft.machineLifespanHours} onChange={(v) => set("machineLifespanHours", v)} />
           <NumberField label="Costo de repuestos" prefix={sym} step={100} value={draft.repairCosts} onChange={(v) => set("repairCosts", v)} />
           <NumberField label="Margen de error" suffix="%" step={0.5} value={draft.errorMarginPercent} onChange={(v) => set("errorMarginPercent", v)} hint="Fallas, purgas y piezas que salen mal." />
+
+          <div className="border-t border-stone-100 pt-4 sm:col-span-2 dark:border-stone-800">
+            <div className="text-sm font-semibold">Venta por MercadoLibre</div>
+            <p className="text-xs text-stone-500">
+              Para que el precio ML te deje lo mismo que vender directo. Revisá los valores en el simulador de costos de tu cuenta de vendedor.
+            </p>
+          </div>
+          <NumberField
+            label="Comisión de la publicación"
+            suffix="%"
+            step={0.5}
+            value={draft.mlComisionPct}
+            onChange={(v) => set("mlComisionPct", v)}
+            hint="Sin IVA: se le suma 21 %. Clásica ~12-15 %, Premium ~17-20 %."
+          />
+          <NumberField
+            label="Retención de Ingresos Brutos"
+            suffix="%"
+            step={0.5}
+            value={draft.mlIibbPct}
+            onChange={(v) => set("mlIibbPct", v)}
+            hint="La que te descuenta Mercado Pago. Con monotributo unificado suele ser 0."
+          />
+          <NumberField label="Envío que pagás vos" prefix={sym} step={100} value={draft.mlEnvio} onChange={(v) => set("mlEnvio", v)} hint="Por venta (envío gratis)." />
+          <NumberField
+            label="Cargo fijo por unidad"
+            prefix={sym}
+            step={50}
+            value={draft.mlCargoFijo}
+            onChange={(v) => set("mlCargoFijo", v)}
+            hint="Sin IVA: se le suma 21 %."
+          />
+          <NumberField
+            label="Sin cargo fijo desde"
+            prefix={sym}
+            step={1000}
+            value={draft.mlCargoFijoHasta}
+            onChange={(v) => set("mlCargoFijoHasta", v)}
+            hint="Desde este precio ML no cobra el cargo fijo."
+          />
         </div>
         </>
       )}

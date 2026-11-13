@@ -1,8 +1,8 @@
-import type { CostResult } from "./calc";
-import { sanitize } from "./calc";
+import type { CostResult, MLInputs } from "./calc";
+import { precioMercadoLibre, sanitize } from "./calc";
 import { CUSTOM_PRINTER, findPrinter, isCurrency, type Currency } from "./data";
 
-export interface Profile {
+export interface Profile extends MLInputs {
   id: string;
   name: string;
   currency: Currency;
@@ -71,7 +71,13 @@ export function defaultProfile(): Profile {
     machineLifespanHours: 4320,
     repairCosts: 150000,
     errorMarginPercent: 5,
+    ...defaultML(),
   };
+}
+
+/** Valores de referencia de MercadoLibre Argentina (nov. 2026): ajustalos en el perfil. */
+export function defaultML(): MLInputs {
+  return { mlComisionPct: 14, mlCargoFijo: 1500, mlCargoFijoHasta: 33000, mlEnvio: 8000, mlIibbPct: 3 };
 }
 
 export function defaultPiece(): Piece {
@@ -79,6 +85,7 @@ export function defaultPiece(): Piece {
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
+const numOr = (v: unknown, fallback: number) => (v === undefined ? fallback : sanitize(v));
 const str = (v: unknown, fallback: string) => (typeof v === "string" && v.trim() ? v : fallback);
 
 /** Normaliza un perfil desconocido (de localStorage o de un JSON importado). */
@@ -100,6 +107,12 @@ export function normalizeProfile(v: unknown): Profile | null {
     machineLifespanHours: sanitize(v.machineLifespanHours),
     repairCosts: sanitize(v.repairCosts),
     errorMarginPercent: sanitize(v.errorMarginPercent),
+    // Perfiles de antes no tienen estos campos: se completan con los valores de referencia
+    mlComisionPct: numOr(v.mlComisionPct, d.mlComisionPct),
+    mlCargoFijo: numOr(v.mlCargoFijo, d.mlCargoFijo),
+    mlCargoFijoHasta: numOr(v.mlCargoFijoHasta, d.mlCargoFijoHasta),
+    mlEnvio: numOr(v.mlEnvio, d.mlEnvio),
+    mlIibbPct: numOr(v.mlIibbPct, d.mlIibbPct),
   };
 }
 
@@ -125,6 +138,8 @@ export function normalizeProduct(v: unknown): Product | null {
   if (!profile) return null;
   const r = isObj(v.results) ? v.results : {};
   const results = Object.fromEntries(RESULT_KEYS.map((k) => [k, sanitize(r[k])])) as unknown as CostResult;
+  // El precio ML se recalcula siempre con los costos ML del perfil (así los productos viejos usan la fórmula nueva)
+  results.precioML = precioMercadoLibre(results.total, profile);
   const date = typeof v.createdAt === "string" && !Number.isNaN(Date.parse(v.createdAt)) ? v.createdAt : new Date().toISOString();
   return {
     id: str(v.id, newId()),
