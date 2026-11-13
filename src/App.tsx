@@ -27,6 +27,7 @@ import {
   ESTADO_LABEL,
   emptyInput,
   formatNumeroPedido,
+  resumenPedido,
   type Aviso,
   type DatosCalculo,
   type Estado,
@@ -34,6 +35,7 @@ import {
   type Pedido,
   type PedidoInput,
 } from "./lib/pedidos";
+import { itemDesdeProducto, itemLibre } from "./lib/items";
 import { startingProfiles, type Backend, type InitialData } from "./lib/backend";
 import type { BusinessInfo } from "./lib/quote";
 import { KEYS, readJSON, readString, writeJSON, writeString } from "./lib/storage";
@@ -343,7 +345,7 @@ export default function App({ backend, initial, user, onLogout }: AppProps) {
   function pedidoDesdeCalculadora() {
     setPedidoForm({
       mode: "new",
-      initial: { ...emptyInput(draft.currency), precioUnitario: round2(results.total) },
+      initial: { ...emptyInput(draft.currency), items: [itemLibre({ precioUnitario: round2(results.total) })] },
       origen: { tipo: "calculadora" },
       datosCalculo: { piece: { ...piece }, profile: { ...draft }, results: { ...results } },
       origenLabel: `Pieza de la calculadora · ${formatMoney(results.total, symbol)} c/u`,
@@ -353,7 +355,7 @@ export default function App({ backend, initial, user, onLogout }: AppProps) {
   function pedidoDesdeProducto(p: Product) {
     setPedidoForm({
       mode: "new",
-      initial: { ...emptyInput(p.profile.currency), descripcion: p.material.trim() ? `${p.name} (${p.material.trim()})` : p.name, precioUnitario: round2(p.results.total) },
+      initial: { ...emptyInput(p.profile.currency), items: [itemDesdeProducto(p)] },
       origen: { tipo: "producto", productoId: p.id, nombre: p.name },
       datosCalculo: { piece: p.piece, profile: p.profile, results: p.results },
       origenLabel: `Producto “${p.name}”`,
@@ -382,7 +384,7 @@ export default function App({ backend, initial, user, onLogout }: AppProps) {
     if (estado === p.estado) return;
     if (
       estado === "cancelado" &&
-      !(await dialog.confirm(`¿Cancelar el pedido ${formatNumeroPedido(p.numero)}?`, `${p.clienteNombre} · ${p.descripcion}`, "Cancelar pedido", true))
+      !(await dialog.confirm(`¿Cancelar el pedido ${formatNumeroPedido(p.numero)}?`, `${p.clienteNombre} · ${resumenPedido(p)}`, "Cancelar pedido", true))
     ) {
       return;
     }
@@ -409,7 +411,7 @@ export default function App({ backend, initial, user, onLogout }: AppProps) {
   async function deletePedido(p: Pedido) {
     const ok = await dialog.confirm(
       `¿Eliminar el pedido ${formatNumeroPedido(p.numero)}?`,
-      `${p.clienteNombre} · ${p.descripcion}. No se puede deshacer (si solo no va más, mejor marcalo como Cancelado).`,
+      `${p.clienteNombre} · ${resumenPedido(p)}. No se puede deshacer (si solo no va más, mejor marcalo como Cancelado).`,
       "Eliminar",
       true,
     );
@@ -594,6 +596,7 @@ export default function App({ backend, initial, user, onLogout }: AppProps) {
           initial={pedidoForm.mode === "edit" ? pedidoForm.pedido : pedidoForm.initial}
           origenLabel={pedidoForm.mode === "new" ? pedidoForm.origenLabel : undefined}
           tuEmail={business.email.trim()}
+          products={products}
           onSubmit={submitPedido}
           onClose={() => setPedidoForm(null)}
         />

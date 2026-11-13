@@ -44,9 +44,9 @@ describe.skipIf(!url)("API", () => {
     clienteNombre: "Juan Pérez",
     clienteEmail: "juan@example.com",
     clienteTelefono: "11 5555-5555",
-    descripcion: "Soporte de auriculares (PLA negro)",
-    cantidad: 2,
-    precioUnitario: 7884.73,
+    items: [
+      { id: "i1", productoId: "prod-1", descripcion: "Soporte de auriculares", detalle: "Material: PLA negro", cantidad: 2, precioUnitario: 7884.73 },
+    ],
     moneda: "ARS",
     fechaEntrega: "",
     notas: "",
@@ -163,8 +163,14 @@ describe.skipIf(!url)("API", () => {
 
   it("edita y borra pedidos", async () => {
     const p = (await call("POST", "/api/pedidos", { input: input() })).body;
-    const e = await call("PUT", `/api/pedidos/${p.id}`, { input: input({ cantidad: 5 }) });
-    expect(e.body.cantidad).toBe(5);
+    const items = [
+      { id: "i1", productoId: "prod-1", descripcion: "Soporte de auriculares", detalle: "", cantidad: 5, precioUnitario: 7884.73 },
+      { id: "i2", productoId: null, descripcion: "Envío", detalle: "", cantidad: 1, precioUnitario: 3000 },
+    ];
+    const e = await call("PUT", `/api/pedidos/${p.id}`, { input: input({ items }) });
+    expect(e.body.items.map((i: { cantidad: number }) => i.cantidad)).toEqual([5, 1]);
+    const mal = await call("PUT", `/api/pedidos/${p.id}`, { input: input({ items: [{ ...items[0], cantidad: 0 }] }) });
+    expect(mal.status).toBe(400);
     expect(e.body.historial.at(-1).tipo).toBe("editado");
     expect((await call("DELETE", `/api/pedidos/${p.id}`)).status).toBe(204);
     expect((await call("PUT", `/api/pedidos/${p.id}`, { input: input() })).status).toBe(404);

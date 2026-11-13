@@ -11,6 +11,7 @@ import {
   hoyISO,
   ordenarPedidos,
   siguienteEstado,
+  resumenPedido,
   totalPedido,
   urgencia,
   type Estado,
@@ -18,6 +19,7 @@ import {
   type Pedido,
   type PedidoEvento,
 } from "../lib/pedidos";
+import { subtotalItem } from "../lib/items";
 import { ESTADO_CLASS, ESTADO_DOT, EstadoBadge } from "./EstadoBadge";
 import { Section } from "./Section";
 
@@ -213,8 +215,7 @@ function PedidoRow({
             <EstadoBadge estado={p.estado} />
           </div>
           <p className="mt-1 text-sm text-stone-700 dark:text-stone-300">
-            {p.cantidad > 1 && <span className="font-medium">{p.cantidad} × </span>}
-            {p.descripcion}
+            {resumenPedido(p)}
           </p>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-stone-500">
             {p.fechaEntrega && (
@@ -298,8 +299,20 @@ function Detalle({ p }: { p: Pedido }) {
       <div className="flex flex-col gap-2">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Detalle</h3>
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-          <dt className="text-stone-500">Precio unitario</dt>
-          <dd className="tabular-nums">{formatMoney(p.precioUnitario, sym)}</dd>
+          <dt className="text-stone-500">Ítems</dt>
+          <dd>
+            <ul className="flex flex-col gap-0.5">
+              {p.items.map((i) => (
+                <li key={i.id} className="flex justify-between gap-3">
+                  <span className="min-w-0">
+                    {i.cantidad} × {i.descripcion}
+                    <span className="text-stone-500"> · {formatMoney(i.precioUnitario, sym)} c/u</span>
+                  </span>
+                  <span className="shrink-0 tabular-nums">{formatMoney(subtotalItem(i), sym)}</span>
+                </li>
+              ))}
+            </ul>
+          </dd>
           <dt className="text-stone-500">Origen</dt>
           <dd>
             {p.origen.tipo === "producto"

@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatMoney, round2, sanitize } from "../lib/calc";
 import { CURRENCY_SYMBOLS, type Currency } from "../lib/data";
-import { newId, productDetail, type Product } from "../lib/model";
+import { itemDesdeProducto, itemLibre, type Item } from "../lib/items";
+import type { Product } from "../lib/model";
 import {
   DEFAULT_VALID_DAYS,
   billableLines,
   businessContactLines,
-  lineSubtotal,
   quoteTotal,
   type BusinessInfo,
   type Quote,
   type QuoteLine,
 } from "../lib/quote";
+import { ItemsEditor, type ItemExtra } from "./ItemsEditor";
 import { NumberField } from "./NumberField";
 import { TextField } from "./TextField";
 
@@ -37,33 +38,24 @@ interface Props {
   onDone: (msg: string, kind?: "ok" | "error") => void;
 }
 
-const lineFrom = (s: QuoteSource): QuoteLine => ({
-  id: newId(),
-  description: s.description,
-  detail: s.detail,
-  quantity: 1,
-  unitPrice: round2(s.unitPrice),
+const toLine = (i: Item): QuoteLine => ({
+  id: i.id,
+  description: i.descripcion,
+  detail: i.detalle,
+  quantity: i.cantidad,
+  unitPrice: i.precioUnitario,
 });
 
 export function QuoteBuilder({ currency, current, products, initialKeys, business, onBusinessChange, nextNumber, onNumberUsed, onClose, onDone }: Props) {
   const symbol = CURRENCY_SYMBOLS[currency];
   const money = (n: number) => formatMoney(n, symbol);
 
-  // Solo se pueden sumar productos en la misma moneda del presupuesto
-  const sources = useMemo<QuoteSource[]>(() => {
-    const list = products
-      .filter((p) => p.profile.currency === currency)
-      .sort((a, b) => a.name.localeCompare(b.name, "es"))
-      .map((p) => ({
-        key: p.id,
-        label: p.material.trim() ? `${p.name} (${p.material.trim()})` : p.name,
-        description: p.name,
-        detail: productDetail(p),
-        unitPrice: p.results.total,
-      }));
-    return current ? [current, ...list] : list;
-  }, [products, currency, current]);
-  const otherCurrency = products.length - (sources.length - (current ? 1 : 0));
+  const fromCurrent = (s: QuoteSource): Item =>
+    itemLibre({ descripcion: s.description, detalle: s.detail, precioUnitario: round2(s.unitPrice) });
+  const extras = useMemo<ItemExtra[]>(
+    () => (current ? [{ key: current.key, label: current.label, crear: () => fromCurrent(current) }] : []),
+    [current],
+  );
 
   const setBusiness = (fn: (b: BusinessInfo) => BusinessInfo) => onBusinessChange(fn(business));
   const [number, setNumber] = useState(() => Math.max(1, Math.floor(sanitize(nextNumber))));
@@ -71,9 +63,14 @@ export function QuoteBuilder({ currency, current, products, initialKeys, busines
   const [clientName, setClientName] = useState("");
   const [clientContact, setClientContact] = useState("");
   const [notes, setNotes] = useState("");
-  const [lines, setLines] = useState<QuoteLine[]>(() =>
-    initialKeys.map((k) => sources.find((s) => s.key === k)).filter((s): s is QuoteSource => !!s).map(lineFrom),
+  const [items, setItems] = useState<Item[]>(() =>
+    initialKeys.flatMap((k) => {
+      if (current && k === current.key) return [fromCurrent(current)];
+      const p = products.find((x) => x.id === k && x.profile.currency === currency);
+      return p ? [itemDesdeProducto(p)] : [];
+    }),
   );
+  const lines = useMemo(() => items.map(toLine), [items]);
   const [busy, setBusy] = useState(false);
   // Si la empresa ya está cargada se muestra resumida; si no, el formulario abierto
   const [editingBusiness, setEditingBusiness] = useState(() => !business.name.trim());
@@ -83,18 +80,6 @@ export function QuoteBuilder({ currency, current, products, initialKeys, busines
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-
-  const setLine = (id: string, patch: Partial<QuoteLine>) =>
-    setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-
-  function addSource(key: string) {
-    if (key === "free") {
-      setLines((ls) => [...ls, { id: newId(), description: "", detail: "", quantity: 1, unitPrice: 0 }]);
-      return;
-    }
-    const s = sources.find((x) => x.key === key);
-    if (s) setLines((ls) => [...ls, lineFrom(s)]);
-  }
 
   const total = quoteTotal(lines);
   const canExport = billableLines(lines).length > 0 && !busy;
@@ -208,89 +193,7 @@ export function QuoteBuilder({ currency, current, products, initialKeys, busines
           {/* ---------- ítems ---------- */}
           <fieldset className="flex flex-col gap-3">
             <legend className="mb-2 text-sm font-semibold">Ítems</legend>
-            {lines.length === 0 && (
-              <p className="rounded-xl border border-dashed border-stone-300 p-4 text-center text-sm text-stone-500 dark:border-stone-700">
-                Agregá la pieza actual, productos guardados o un ítem libre (envío, diseño, pintura…).
-              </p>
-            )}
-            {lines.map((l, i) => (
-              <div key={l.id} className="rounded-xl border border-stone-200 p-3 dark:border-stone-800">
-                <div className="flex items-end gap-2">
-                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                    <label htmlFor={`desc-${l.id}`} className="text-xs font-medium text-stone-600 dark:text-stone-400">
-                      Descripción
-                    </label>
-                    <input
-                      id={`desc-${l.id}`}
-                      className="field-input"
-                      maxLength={120}
-                      placeholder="Ej: Envío a domicilio"
-                      value={l.description}
-                      autoFocus={i === lines.length - 1 && !l.description}
-                      onChange={(e) => setLine(l.id, { description: e.target.value })}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-ghost mb-0.5 text-red-700 hover:text-red-800 dark:text-red-400"
-                    onClick={() => setLines((ls) => ls.filter((x) => x.id !== l.id))}
-                    aria-label={`Quitar ${l.description || "ítem"}`}
-                  >
-                    Quitar
-                  </button>
-                </div>
-                <div className="mt-2">
-                  <TextField
-                    label="Detalle para el cliente (opcional)"
-                    value={l.detail}
-                    maxLength={200}
-                    placeholder="Ej: Material: PLA negro · 12 × 8 cm"
-                    onChange={(detail) => setLine(l.id, { detail })}
-                  />
-                </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  <NumberField label="Cantidad" value={l.quantity} step={1} onChange={(v) => setLine(l.id, { quantity: v })} />
-                  <NumberField
-                    label="Precio unitario"
-                    prefix={symbol}
-                    value={l.unitPrice}
-                    onChange={(v) => setLine(l.id, { unitPrice: v })}
-                  />
-                  <div className="col-span-2 flex items-end justify-end pb-2 text-sm tabular-nums sm:col-span-1">
-                    <span className="text-stone-500">Subtotal&nbsp;</span>
-                    <span className="font-semibold">{money(lineSubtotal(l))}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-            <select
-              className="field-input"
-              aria-label="Agregar ítem"
-              value=""
-              onChange={(e) => addSource(e.target.value)}
-            >
-              <option value="" disabled>
-                + Agregar ítem…
-              </option>
-              {current && <option value={current.key}>{current.label}</option>}
-              {sources.some((s) => s.key !== current?.key) && (
-                <optgroup label="Mis productos">
-                  {sources
-                    .filter((s) => s.key !== current?.key)
-                    .map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {s.label} — {money(s.unitPrice)}
-                      </option>
-                    ))}
-                </optgroup>
-              )}
-              <option value="free">Ítem libre (envío, diseño…)</option>
-            </select>
-            {otherCurrency > 0 && (
-              <p className="text-xs text-stone-500">
-                {otherCurrency} producto(s) en otra moneda no se listan: el presupuesto va en {currency}.
-              </p>
-            )}
+            <ItemsEditor items={items} onChange={setItems} products={products} currency={currency} extras={extras} />
             <div className="flex items-baseline justify-between rounded-xl bg-teal-700 px-4 py-3 text-white dark:bg-teal-500 dark:text-stone-950">
               <span className="text-xs font-medium uppercase tracking-wide opacity-80">Total</span>
               <span className="text-xl font-bold tabular-nums">{money(total)}</span>

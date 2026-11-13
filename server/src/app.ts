@@ -62,17 +62,21 @@ function parseInput(v: unknown): PedidoInput {
     clienteNombre: typeof v.clienteNombre === "string" ? v.clienteNombre : "",
     clienteEmail: p.clienteEmail,
     clienteTelefono: p.clienteTelefono,
-    descripcion: p.descripcion,
-    cantidad: typeof v.cantidad === "number" ? v.cantidad : 0,
-    precioUnitario: p.precioUnitario,
+    items: p.items,
     moneda: p.moneda,
     fechaEntrega: p.fechaEntrega,
     notas: p.notas,
     notificarCliente: p.notificarCliente,
   };
+  // normalizePedido corrige las cantidades inválidas a 1: acá se rechazan, como en el front
+  const raw = Array.isArray(v.items) ? v.items : [];
+  if (raw.some((i) => isObj(i) && (typeof i.cantidad !== "number" || !Number.isInteger(i.cantidad) || i.cantidad < 1))) {
+    throw new HttpError(400, "Las cantidades tienen que ser 1 o más.");
+  }
   const errores = Object.values(validarInput(input));
   if (errores.length) throw new HttpError(400, errores[0]!);
-  if (input.clienteNombre.length > 120 || input.descripcion.length > 500 || input.notas.length > 2000) {
+  const largo = input.items.some((i) => i.descripcion.length > 200 || i.detalle.length > 300 || i.id.length > 100 || (i.productoId?.length ?? 0) > 100);
+  if (largo || input.clienteNombre.length > 120 || input.notas.length > 2000) {
     throw new HttpError(400, "Hay un texto demasiado largo.");
   }
   return input;

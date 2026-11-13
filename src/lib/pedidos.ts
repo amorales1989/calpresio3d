@@ -3,6 +3,7 @@
 import type { CostResult } from "./calc";
 import { round2, sanitize } from "./calc";
 import { isCurrency, type Currency } from "./data";
+import { normalizeItem, totalItems, resumenItems, type Item } from "./items";
 import type { Piece, Profile } from "./model";
 
 export const ESTADOS = [
@@ -67,14 +68,15 @@ export interface PedidoEvento {
   detalle?: string;
 }
 
+export type PedidoItem = Item;
+
 /** Lo que se carga en el formulario. */
 export interface PedidoInput {
   clienteNombre: string;
   clienteEmail: string;
   clienteTelefono: string;
-  descripcion: string;
-  cantidad: number;
-  precioUnitario: number;
+  /** Productos o ítems libres del pedido (al menos uno). */
+  items: PedidoItem[];
   moneda: Currency;
   fechaEntrega: string; // "AAAA-MM-DD" o ""
   notas: string;
@@ -109,8 +111,12 @@ export interface Aviso {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const isEmail = (s: string) => EMAIL_RE.test(s.trim());
 
-export const totalPedido = (p: Pick<PedidoInput, "cantidad" | "precioUnitario">) =>
-  round2(sanitize(p.cantidad) * sanitize(p.precioUnitario));
+export const totalPedido = (p: Pick<PedidoInput, "items">) => totalItems(p.items);
+
+/** "3 × Maceta, 2 × Llavero": para la lista, los mails y los diálogos. */
+export const resumenPedido = (p: Pick<PedidoInput, "items">) => resumenItems(p.items);
+
+export const MAX_ITEMS = 100;
 
 export const formatNumeroPedido = (n: number) => `#${String(Math.max(1, Math.floor(sanitize(n)))).padStart(4, "0")}`;
 
@@ -119,9 +125,7 @@ export function emptyInput(moneda: Currency = "ARS"): PedidoInput {
     clienteNombre: "",
     clienteEmail: "",
     clienteTelefono: "",
-    descripcion: "",
-    cantidad: 1,
-    precioUnitario: 0,
+    items: [],
     moneda,
     fechaEntrega: "",
     notas: "",
@@ -133,9 +137,12 @@ export function emptyInput(moneda: Currency = "ARS"): PedidoInput {
 export function validarInput(i: PedidoInput): Partial<Record<keyof PedidoInput, string>> {
   const e: Partial<Record<keyof PedidoInput, string>> = {};
   if (!i.clienteNombre.trim()) e.clienteNombre = "Poné el nombre del cliente.";
-  if (!i.descripcion.trim()) e.descripcion = "Describí qué hay que imprimir.";
   if (i.clienteEmail.trim() && !isEmail(i.clienteEmail)) e.clienteEmail = "El email no es válido.";
-  if (!Number.isInteger(i.cantidad) || i.cantidad < 1) e.cantidad = "La cantidad tiene que ser 1 o más.";
+  const items = i.items.filter((x) => x.descripcion.trim() || sanitize(x.precioUnitario) > 0);
+  if (!items.length) e.items = "Agregá al menos un producto o ítem.";
+  else if (items.some((x) => !x.descripcion.trim())) e.items = "Hay un ítem sin descripción.";
+  else if (items.some((x) => !Number.isInteger(x.cantidad) || x.cantidad < 1)) e.items = "Las cantidades tienen que ser 1 o más.";
+  else if (items.length > MAX_ITEMS) e.items = `Máximo ${MAX_ITEMS} ítems por pedido.`;
   if (i.fechaEntrega && Number.isNaN(Date.parse(i.fechaEntrega))) e.fechaEntrega = "Fecha inválida.";
   return e;
 }
@@ -147,9 +154,15 @@ export function limpiarInput(i: PedidoInput): PedidoInput {
     clienteNombre: i.clienteNombre.trim(),
     clienteEmail: email,
     clienteTelefono: i.clienteTelefono.trim(),
-    descripcion: i.descripcion.trim(),
-    cantidad: Math.max(1, Math.floor(sanitize(i.cantidad))),
-    precioUnitario: round2(sanitize(i.precioUnitario)),
+    items: i.items
+      .filter((x) => x.descripcion.trim())
+      .map((x) => ({
+        ...x,
+        descripcion: x.descripcion.trim(),
+        detalle: x.detalle.trim(),
+        cantidad: Math.max(1, Math.floor(sanitize(x.cantidad))),
+        precioUnitario: round2(sanitize(x.precioUnitario)),
+      })),
     moneda: i.moneda,
     fechaEntrega: i.fechaEntrega,
     notas: i.notas.trim(),
@@ -201,7 +214,8 @@ export function filtrarPedidos(list: Pedido[], filtro: FiltroEstado, query: stri
   return list.filter((p) => {
     if (filtro === "activos" ? !esActivo(p.estado) : filtro !== "todos" && p.estado !== filtro) return false;
     if (!q) return true;
-    return normalizar(`${p.numero} ${p.clienteNombre} ${p.descripcion} ${p.clienteEmail} ${p.clienteTelefono}`).includes(q);
+    const items = p.items.map((i) => i.descripcion).join(" ");
+    return normalizar(`${p.numero} ${p.clienteNombre} ${items} ${p.clienteEmail} ${p.clienteTelefono}`).includes(q);
   });
 }
 
@@ -324,20 +338,36 @@ function normalizeEvento(v: unknown): PedidoEvento | null {
   };
 }
 
+/** Ítems del pedido. Los pedidos de antes tenían un solo producto (descripción, cantidad y precio sueltos). */
+function normalizeItems(v: Record<string, unknown>, id: string, origen: OrigenPedido): PedidoItem[] {
+  if (Array.isArray(v.items)) return v.items.map(normalizeItem).filter((x): x is PedidoItem => x !== null);
+  const descripcion = s(v.descripcion);
+  if (!descripcion && !sanitize(v.precioUnitario)) return [];
+  return [
+    {
+      id: `${id}-1`,
+      productoId: origen.tipo === "producto" ? origen.productoId : null,
+      descripcion,
+      detalle: "",
+      cantidad: Math.max(1, Math.floor(sanitize(v.cantidad))),
+      precioUnitario: round2(sanitize(v.precioUnitario)),
+    },
+  ];
+}
+
 export function normalizePedido(v: unknown): Pedido | null {
   if (!isObj(v) || typeof v.id !== "string" || !v.id) return null;
   const now = new Date().toISOString();
   const creadoAt = isoOr(v.creadoAt, now)!;
   const fecha = s(v.fechaEntrega);
+  const origen = normalizeOrigen(v.origen);
   return {
     id: v.id,
     numero: Math.max(1, Math.floor(sanitize(v.numero))),
     clienteNombre: s(v.clienteNombre) || "Sin nombre",
     clienteEmail: s(v.clienteEmail),
     clienteTelefono: s(v.clienteTelefono),
-    descripcion: s(v.descripcion),
-    cantidad: Math.max(1, Math.floor(sanitize(v.cantidad))),
-    precioUnitario: sanitize(v.precioUnitario),
+    items: normalizeItems(v, v.id, origen),
     moneda: isCurrency(v.moneda) ? v.moneda : "ARS",
     fechaEntrega: /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : "",
     notas: s(v.notas),
@@ -347,7 +377,7 @@ export function normalizePedido(v: unknown): Pedido | null {
     actualizadoAt: isoOr(v.actualizadoAt, creadoAt)!,
     terminadoAt: isoOr(v.terminadoAt, null),
     avisoAt: isoOr(v.avisoAt, null),
-    origen: normalizeOrigen(v.origen),
+    origen,
     datosCalculo: isObj(v.datosCalculo) ? (v.datosCalculo as unknown as DatosCalculo) : null,
     historial: Array.isArray(v.historial)
       ? v.historial.map(normalizeEvento).filter((e): e is PedidoEvento => e !== null)

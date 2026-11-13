@@ -19,13 +19,17 @@ import {
   type Pedido,
   type PedidoInput,
 } from "./pedidos";
+import { itemLibre } from "./items";
+
+const item = (descripcion: string, cantidad: number, precioUnitario: number) =>
+  itemLibre({ id: `i-${descripcion}`, descripcion, cantidad, precioUnitario });
 
 const T0 = "2026-11-12T12:00:00.000Z";
 let seq = 0;
 const ids = (): [string, string] => [`e${++seq}`, `e${++seq}`];
 
 function input(over: Partial<PedidoInput> = {}): PedidoInput {
-  return { ...emptyInput(), clienteNombre: "Ana", descripcion: "Maceta", precioUnitario: 1000, ...over };
+  return { ...emptyInput(), clienteNombre: "Ana", items: [item("Maceta", 1, 1000)], ...over };
 }
 
 function pedido(over: Partial<PedidoInput> = {}, numero = 1): Pedido {
@@ -35,12 +39,19 @@ function pedido(over: Partial<PedidoInput> = {}, numero = 1): Pedido {
 describe("validación y totales", () => {
   it("exige cliente y descripción, y valida el email", () => {
     const e = validarInput({ ...emptyInput(), clienteEmail: "no-es-mail" });
-    expect(Object.keys(e).sort()).toEqual(["clienteEmail", "clienteNombre", "descripcion"]);
+    expect(Object.keys(e).sort()).toEqual(["clienteEmail", "clienteNombre", "items"]);
     expect(validarInput(input({ clienteEmail: "ana@mail.com" }))).toEqual({});
   });
 
   it("calcula el total redondeado", () => {
-    expect(totalPedido({ cantidad: 3, precioUnitario: 1234.567 })).toBe(3703.7);
+    expect(totalPedido({ items: [item("A", 3, 1234.567), item("B", 2, 500)] })).toBe(4703.7);
+  });
+
+  it("valida los ítems y descarta los vacíos", () => {
+    expect(validarInput(input({ items: [item("", 1, 500)] })).items).toBe("Hay un ítem sin descripción.");
+    expect(validarInput(input({ items: [item("A", 0, 500)] })).items).toBe("Las cantidades tienen que ser 1 o más.");
+    const p = pedido({ items: [item("Maceta", 2, 1000), item("  ", 1, 0)] });
+    expect(p.items.map((i) => i.descripcion)).toEqual(["Maceta"]);
   });
 
   it("formatea el número", () => {
@@ -149,15 +160,28 @@ describe("listas", () => {
 describe("edición y normalización", () => {
   it("editar no toca estado ni número y deja registro", () => {
     const p = pedido();
-    const e = editarPedido(p, input({ descripcion: "Maceta grande", cantidad: 2 }), "ed1");
-    expect(e).toMatchObject({ numero: 1, estado: "pendiente", descripcion: "Maceta grande", cantidad: 2 });
+    const e = editarPedido(p, input({ items: [item("Maceta grande", 2, 1000)] }), "ed1");
+    expect(e).toMatchObject({ numero: 1, estado: "pendiente" });
+    expect(e.items).toMatchObject([{ descripcion: "Maceta grande", cantidad: 2 }]);
     expect(e.historial.at(-1)?.tipo).toBe("editado");
   });
 
   it("normaliza datos rotos sin romper", () => {
     expect(normalizePedido(null)).toBeNull();
     const p = normalizePedido({ id: "x", estado: "inventado", cantidad: -3, moneda: "XXX", fechaEntrega: "mañana", historial: [{}] });
-    expect(p).toMatchObject({ estado: "pendiente", cantidad: 1, moneda: "ARS", fechaEntrega: "", historial: [], clienteNombre: "Sin nombre" });
+    expect(p).toMatchObject({ estado: "pendiente", items: [], moneda: "ARS", fechaEntrega: "", historial: [], clienteNombre: "Sin nombre" });
+  });
+
+  it("convierte los pedidos viejos (un solo producto) a un ítem", () => {
+    const p = normalizePedido({
+      id: "viejo",
+      descripcion: "Llavero",
+      cantidad: 10,
+      precioUnitario: 1800,
+      origen: { tipo: "producto", productoId: "prod-1", nombre: "Llavero" },
+    })!;
+    expect(p.items).toEqual([{ id: "viejo-1", productoId: "prod-1", descripcion: "Llavero", detalle: "", cantidad: 10, precioUnitario: 1800 }]);
+    expect(totalPedido(p)).toBe(18000);
   });
 
   it("ida y vuelta por JSON conserva el pedido", () => {

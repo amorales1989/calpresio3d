@@ -1,6 +1,6 @@
 // Aviso por mail cuando un pedido pasa a "terminado".
 import nodemailer from "nodemailer";
-import { formatNumeroPedido, type Aviso, type Pedido } from "../../src/lib/pedidos";
+import { formatNumeroPedido, resumenPedido, type Aviso, type Pedido } from "../../src/lib/pedidos";
 import { businessContactLines, type BusinessInfo } from "../../src/lib/quote";
 import type { MailConfig } from "./config.js";
 
@@ -52,7 +52,7 @@ export function avisoMessages(p: Pedido, aviso: Aviso, business: BusinessInfo): 
     if (rol === "vos") {
       const lines = [
         `El pedido ${n} de ${p.clienteNombre} pasó a Terminado.`,
-        `${p.cantidad} × ${p.descripcion}`,
+        ...p.items.map((i) => `${i.cantidad} × ${i.descripcion}`),
         p.clienteTelefono ? `Teléfono del cliente: ${p.clienteTelefono}` : "",
         p.notificarCliente && p.clienteEmail ? `También se le avisó al cliente (${p.clienteEmail}).` : "Al cliente no se le avisó por mail.",
       ].filter(Boolean);
@@ -66,7 +66,7 @@ export function avisoMessages(p: Pedido, aviso: Aviso, business: BusinessInfo): 
     const contacto = businessContactLines(business);
     const lines = [
       `¡Hola ${p.clienteNombre}!`,
-      `Tu pedido ${n} ya está listo: ${p.cantidad} × ${p.descripcion}.`,
+      `Tu pedido ${n} ya está listo: ${resumenPedido(p)}.`,
       "Escribinos para coordinar la entrega o el retiro.",
     ];
     return {

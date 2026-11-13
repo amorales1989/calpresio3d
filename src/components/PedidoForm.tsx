@@ -12,7 +12,8 @@ import {
   type Estado,
   type PedidoInput,
 } from "../lib/pedidos";
-import { NumberField } from "./NumberField";
+import type { Product } from "../lib/model";
+import { ItemsEditor } from "./ItemsEditor";
 import { TextField } from "./TextField";
 
 export interface PedidoFormProps {
@@ -23,11 +24,13 @@ export interface PedidoFormProps {
   origenLabel?: string;
   /** El mail del negocio: a quién le llega el aviso de "terminado". */
   tuEmail: string;
+  /** Productos guardados para elegir los ítems. */
+  products: Product[];
   onSubmit: (input: PedidoInput, estado: Estado) => Promise<void>;
   onClose: () => void;
 }
 
-export function PedidoForm({ editing, initial, origenLabel, tuEmail, onSubmit, onClose }: PedidoFormProps) {
+export function PedidoForm({ editing, initial, origenLabel, tuEmail, products, onSubmit, onClose }: PedidoFormProps) {
   const [v, setV] = useState<PedidoInput>(initial);
   const [estado, setEstado] = useState<Estado>("pendiente");
   const [touched, setTouched] = useState(false);
@@ -90,33 +93,24 @@ export function PedidoForm({ editing, initial, origenLabel, tuEmail, onSubmit, o
           {/* ---------- qué ---------- */}
           <fieldset className="flex flex-col gap-3">
             <legend className="mb-2 text-sm font-semibold">Pedido</legend>
-            <Field error={err("descripcion")}>
-              <TextField
-                label="Descripción"
-                value={v.descripcion}
-                onChange={(x) => set("descripcion", x)}
-                placeholder="Ej: Soporte de auriculares negro mate"
-                maxLength={200}
-                autoFocus={!initial.descripcion}
-              />
-            </Field>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Field error={err("cantidad")}>
-                <NumberField label="Cantidad" step={1} value={v.cantidad} onChange={(x) => set("cantidad", Math.floor(x))} />
-              </Field>
-              <NumberField label="Precio unitario" prefix={symbol} value={v.precioUnitario} onChange={(x) => set("precioUnitario", x)} />
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor={ids.moneda} className="text-xs font-medium text-stone-600 dark:text-stone-400">
-                  Moneda
-                </label>
-                <select id={ids.moneda} className="field-input" value={v.moneda} onChange={(e) => set("moneda", e.target.value as Currency)}>
-                  {CURRENCIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <ItemsEditor
+              items={v.items}
+              onChange={(items) => set("items", items)}
+              products={products}
+              currency={v.moneda}
+              error={err("items")}
+            />
+            <div className="flex max-w-40 flex-col gap-1.5">
+              <label htmlFor={ids.moneda} className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                Moneda
+              </label>
+              <select id={ids.moneda} className="field-input" value={v.moneda} onChange={(e) => set("moneda", e.target.value as Currency)}>
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="flex items-baseline justify-between rounded-xl bg-teal-700 px-4 py-3 text-white dark:bg-teal-500 dark:text-stone-950">
               <span className="text-xs font-medium uppercase tracking-wide opacity-80">Total del pedido</span>
